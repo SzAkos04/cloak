@@ -1,1 +1,4 @@
 build/
+test/
+scripts/valgrind_*.log
+scripts/leak_summary.log

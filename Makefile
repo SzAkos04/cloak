@@ -1,7 +1,7 @@
 CC := gcc
 PROJECT := cloak
 CFLAGS := -Wall -Wextra -Werror -Wpedantic
-LDFLAGS ?= `llvm-config --cflags --libs core`
+# LDFLAGS ?= `llvm-config --cflags --libs core`
 INCLUDES := -Iinclude
 SRC_DIR := src
 SRC := $(wildcard $(SRC_DIR)/*.c)
