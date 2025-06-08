@@ -10,6 +10,7 @@ typedef enum {
     TOKEN_RBRACE,    // `}`
     TOKEN_COLON,     // `:`
     TOKEN_SEMICOLON, // `;`
+    TOKEN_COMMA,     // `,`
 
     // one or two char tokens
     TOKEN_EQUAL,      // `=`

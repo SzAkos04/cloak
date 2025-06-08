@@ -120,26 +120,23 @@ static int parse_assign(ast_node_t **node) {
         return -1;
     }
 
-    // Save current position to backtrack if no assignment found
+    // save current position to backtrack if no assignment found
     int saved_pos = parser.current;
 
-    // Consume identifier token
+    // consume identifier token
     advance();
 
-    // Now check for '=' token
     if (!match(TOKEN_EQUAL)) {
-        // Not an assignment, rewind parser current position and return failure
+        // not an assignment, rewind parser current position and return failure
         parser.current = saved_pos;
         return 1;
     }
 
-    // Parse the expression on the right side of '='
     ast_node_t *value = NULL;
     if (parse_expression(&value) != 0) {
         return -1;
     }
 
-    // Expect semicolon after assignment
     if (!match(TOKEN_SEMICOLON)) {
         error("expected `;` after assignment at line %d, found `%s`",
               peek().line, peek().lexeme);
@@ -147,7 +144,6 @@ static int parse_assign(ast_node_t **node) {
         return -1;
     }
 
-    // Build AST_ASSIGN node
     ast_node_t *assign = (ast_node_t *)malloc(sizeof(ast_node_t));
     if (!assign) {
         perr("parser: failed to allocate memory for `assign` node");
@@ -400,10 +396,79 @@ static int parse_function(ast_node_t **node) {
               peek().line, peek().lexeme);
         return -1;
     }
-    if (!match(TOKEN_RPAREN)) {
-        error("expected `)` at line %d, found `%s`", peek().line,
-              peek().lexeme);
-        return -1;
+
+    param_t *params = NULL;
+    int param_count = 0;
+
+    if (!match(TOKEN_RPAREN)) { // if not immediately `)`, parse params
+        while (true) {
+            token_t param_name_tok = peek();
+            if (!match(TOKEN_IDENTIFIER)) {
+                error("expected parameter name at line %d, found `%s`",
+                      peek().line, peek().lexeme);
+                free(params);
+                return -1;
+            }
+
+            if (!match(TOKEN_COLON)) {
+                error(
+                    "expected `:` after parameter name at line %d, found `%s`",
+                    peek().line, peek().lexeme);
+                free(params);
+                return -1;
+            }
+
+            token_t param_type_tok = peek();
+            if (!match(TOKEN_IDENTIFIER)) {
+                error("expected parameter type at line %d, found `%s`",
+                      peek().line, peek().lexeme);
+                free(params);
+                return -1;
+            }
+
+            type_t param_type;
+            if (parse_type(param_type_tok.lexeme, &param_type) != 0) {
+                free(params);
+                return -1;
+            }
+
+            // Add param to list
+            param_t *new_params =
+                realloc(params, sizeof(param_t) * (param_count + 1));
+            if (!new_params) {
+                perr("parser: failed to allocate memory for function params");
+                free(params);
+                return -1;
+            }
+            params = new_params;
+            params[param_count].name = strdup(param_name_tok.lexeme);
+            if (!params[param_count].name) {
+                perr("parser: failed to allocate memory for param name string");
+                for (int i = 0; i < param_count; i++) {
+                    free(params[i].name);
+                }
+                free(params);
+                return -1;
+            }
+            params[param_count].type = param_type;
+            param_count++;
+
+            if (match(TOKEN_COMMA)) {
+                continue; // parse next param
+            } else if (match(TOKEN_RPAREN)) {
+                break; // end of params
+            } else {
+                error("expected `,` or `)` after parameter at line %d, found "
+                      "`%s`",
+                      peek().line, peek().lexeme);
+                // free all param names and params array
+                for (int i = 0; i < param_count; i++) {
+                    free(params[i].name);
+                }
+                free(params);
+                return -1;
+            }
+        }
     }
 
     if (!match(TOKEN_COLON)) {
@@ -439,8 +504,8 @@ static int parse_function(ast_node_t **node) {
         free(fn);
         return -1;
     }
-    fn->func.params = NULL; // no params yet
-    fn->func.param_count = 0;
+    fn->func.params = params;
+    fn->func.param_count = param_count;
     fn->func.ret_type = ret_type;
     fn->func.body = body;
     *node = fn;
@@ -454,8 +519,6 @@ static int parse_program(ast_node_t **node) {
     while (!is_at_end()) {
         ast_node_t *decl = NULL;
 
-        // For now, only function declarations are supported as top-level decls.
-        // Extend this later if you want to parse global variables, etc.
         if (peek().type == TOKEN_FN) {
             if (parse_function(&decl) != 0) {
                 for (int i = 0; i < decl_count; i++) {
@@ -561,6 +624,9 @@ void free_ast_node(ast_node_t *node) {
 
     case AST_FUNCTION:
         free(node->func.name);
+        for (int i = 0; i < node->func.param_count; i++) {
+            free(node->func.params[i].name);
+        }
         free(node->func.params);
         free_ast_node(node->func.body);
         break;

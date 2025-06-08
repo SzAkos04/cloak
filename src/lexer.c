@@ -151,6 +151,8 @@ static int next_token(token_t *token) {
         return make_token(TOKEN_COLON, token);
     case ';':
         return make_token(TOKEN_SEMICOLON, token);
+    case ',':
+        return make_token(TOKEN_COMMA, token);
     case '=':
         if (peek() == '=') {
             advance();
