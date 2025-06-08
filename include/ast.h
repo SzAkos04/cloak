@@ -48,3 +48,5 @@ typedef struct ast_node {
 typedef struct {
     ast_node_t *root;
 } ast_t;
+
+void debug_ast(ast_t *ast);

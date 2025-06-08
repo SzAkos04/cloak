@@ -13,5 +13,3 @@ void parser_init(token_t *tokens, int count);
 int parse_ast(ast_t **ast);
 
 void free_ast(ast_t *ast);
-
-void debug_ast(ast_t *ast);
