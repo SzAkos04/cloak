@@ -14,11 +14,17 @@ typedef enum {
     TOKEN_EQUALEQUAL, // `==`
     TOKEN_BANG,       // `!`
     TOKEN_BANGEQUAL,  // `!=`
-    TOKEN_FN,         // `fn`
+
+    TOKEN_FN,     // `fn`
+    TOKEN_RETURN, // `return`
+
     TOKEN_IDENTIFIER,
+
     TOKEN_NUMBER,
+    TOKEN_STRING,
+    TOKEN_BOOL,
+
     TOKEN_EOF,
-    TOKEN_UNKNOWN,
 } token_type_t;
 
 typedef struct {

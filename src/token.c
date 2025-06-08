@@ -1,26 +1,6 @@
 #include "debug.h"
 #include "token.h"
 
-/*
-
-    // one char tokens
-    TOKEN_LPAREN, // `(`
-    TOKEN_RPAREN, // `)`
-    TOKEN_LBRACE, // `{`
-    TOKEN_RBRACE, // `}`
-
-    // one or two char tokens
-    TOKEN_EQUAL,      // `=`
-    TOKEN_EQUALEQUAL, // `==`
-    TOKEN_BANG,       // `!`
-    TOKEN_BANGEQUAL,  // `!=`
-    TOKEN_FN,         // `fn`
-    TOKEN_IDENTIFIER,
-    TOKEN_NUMBER,
-    TOKEN_EOF,
-    TOKEN_UNKNOWN,
-*/
-
 static const char *token_type_to_str(token_type_t type) {
     switch (type) {
     case TOKEN_LPAREN:
@@ -45,14 +25,18 @@ static const char *token_type_to_str(token_type_t type) {
         return "TOKEN_BANGEQUAL";
     case TOKEN_FN:
         return "TOKEN_FN";
+    case TOKEN_RETURN:
+        return "TOKEN_RETURN";
     case TOKEN_IDENTIFIER:
         return "TOKEN_IDENTIFIER";
     case TOKEN_NUMBER:
         return "TOKEN_NUMBER";
+    case TOKEN_STRING:
+        return "TOKEN_STRING";
+    case TOKEN_BOOL:
+        return "TOKEN_BOOL";
     case TOKEN_EOF:
         return "TOKEN_EOF";
-    case TOKEN_UNKNOWN:
-        return "TOKEN_UNKNOWN";
     default:
         return NULL;
     }

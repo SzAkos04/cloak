@@ -62,8 +62,17 @@ static int identifier(token_t *token) {
     }
 
     int len = (int)(lexer.current - lexer.start);
-    if (len == 2 && strncmp(lexer.start, "fn", 2) == 0) {
+    if (len == strlen("fn") && strncmp(lexer.start, "fn", strlen("fn")) == 0) {
         return make_token(TOKEN_FN, token);
+    } else if (len == strlen("return") &&
+               strncmp(lexer.start, "return", strlen("return")) == 0) {
+        return make_token(TOKEN_RETURN, token);
+    } else if (len == strlen("true") &&
+               strncmp(lexer.start, "true", strlen("true")) == 0) {
+        return make_token(TOKEN_BOOL, token);
+    } else if (len == strlen("false") &&
+               strncmp(lexer.start, "false", strlen("false")) == 0) {
+        return make_token(TOKEN_BOOL, token);
     }
 
     return make_token(TOKEN_IDENTIFIER, token);
@@ -74,6 +83,42 @@ static int number(token_t *token) {
         advance();
     }
     return make_token(TOKEN_NUMBER, token);
+}
+
+// TODO: support escape codes
+static int string(token_t *token) {
+    while (!is_at_end() && peek() != '"') {
+        if (peek() == '\n') {
+            lexer.line++;
+        }
+        advance();
+    }
+
+    if (is_at_end()) {
+        error("unterminated string literal at line %d", lexer.line);
+        return -1;
+    }
+
+    advance();
+
+    int len = (int)(lexer.current - lexer.start);
+    char *lexeme = (char *)malloc(len - 1);
+    if (!lexeme) {
+        perr("failed to allocate memory for string literal");
+        return -1;
+    }
+
+    memcpy(lexeme, lexer.start + 1, len - 2);
+    lexeme[len - 2] = '\0';
+
+    *token = (token_t){
+        .type = TOKEN_STRING,
+        .lexeme = lexeme,
+        .len = len - 2,
+        .line = lexer.line,
+    };
+
+    return 0;
 }
 
 static int next_token(token_t *token) {
@@ -114,6 +159,8 @@ static int next_token(token_t *token) {
         } else {
             return make_token(TOKEN_BANG, token);
         }
+    case '"':
+        return string(token);
     default:
         if (isdigit(c)) {
             return number(token);
@@ -121,9 +168,8 @@ static int next_token(token_t *token) {
         if (isalpha(c) || c == '_') {
             return identifier(token);
         }
-        error("unknown token at line %d: `%s`", token->line, token->lexeme);
+        error("unknown token at line %d: `%c`", token->line, c);
         return -1;
-        // return make_token(TOKEN_UNKNOWN, token);
     }
 }
 
