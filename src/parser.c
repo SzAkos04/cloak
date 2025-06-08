@@ -50,7 +50,7 @@ static int parse_expression(ast_node_t **node) {
         return 0;
     } else if (tok.type == TOKEN_NUMBER) {
         advance();
-        ast_node_t *lit = malloc(sizeof(ast_node_t));
+        ast_node_t *lit = (ast_node_t *)malloc(sizeof(ast_node_t));
         if (!lit) {
             perr("failed to allocate memory for `lit`");
             return -1;
@@ -69,7 +69,7 @@ static int parse_expression(ast_node_t **node) {
         return 0;
     } else if (tok.type == TOKEN_STRING) {
         advance();
-        ast_node_t *lit = malloc(sizeof(ast_node_t));
+        ast_node_t *lit = (ast_node_t *)malloc(sizeof(ast_node_t));
         if (!lit) {
             perr("failed to allocate memory for `lit`");
             return -1;
@@ -86,7 +86,7 @@ static int parse_expression(ast_node_t **node) {
         return 0;
     } else if (tok.type == TOKEN_BOOL) {
         advance();
-        ast_node_t *lit = malloc(sizeof(ast_node_t));
+        ast_node_t *lit = (ast_node_t *)malloc(sizeof(ast_node_t));
         if (!lit) {
             perr("failed to allocate memory for `lit`");
             return -1;
@@ -141,7 +141,8 @@ static int parse_block(ast_node_t **node) {
         if (parse_return(&stmt) != 0) {
             return -1;
         }
-        stmts = realloc(stmts, sizeof(ast_node_t *) * (stmt_count + 1));
+        stmts = (ast_node_t **)realloc(stmts,
+                                       sizeof(ast_node_t *) * (stmt_count + 1));
         if (!stmts) {
             perr("failed to allocate memory for `stmts`");
             return -1;
@@ -163,6 +164,25 @@ static int parse_block(ast_node_t **node) {
     block->block.stmt = stmts;
     block->block.stmt_count = stmt_count;
     *node = block;
+    return 0;
+}
+
+static int parse_type(const char *str, type_t *type) {
+    if (strcmp(str, "bool") == 0) {
+        *type = TYPE_BOOL;
+    } else if (strcmp(str, "float") == 0) {
+        *type = TYPE_FLOAT;
+    } else if (strcmp(str, "int") == 0) {
+        *type = TYPE_INT;
+    } else if (strcmp(str, "string") == 0) {
+        *type = TYPE_STRING;
+    } else if (strcmp(str, "void") == 0) {
+        *type = TYPE_VOID;
+    } else {
+        error("unknown type: `%s`", str);
+        return -1;
+    }
+
     return 0;
 }
 
@@ -191,8 +211,13 @@ static int parse_function(ast_node_t **node) {
         error("`:` expected");
         return -1;
     }
+    token_t ret = peek();
     if (!match(TOKEN_IDENTIFIER)) { // skip for now
         error("return type expected");
+        return -1;
+    }
+    type_t ret_type;
+    if (parse_type(ret.lexeme, &ret_type) != 0) {
         return -1;
     }
 
@@ -201,7 +226,7 @@ static int parse_function(ast_node_t **node) {
         return -1;
     }
 
-    ast_node_t *fn = malloc(sizeof(ast_node_t));
+    ast_node_t *fn = (ast_node_t *)malloc(sizeof(ast_node_t));
     if (!fn) {
         perr("failed to allocate memory for `fn`");
         return -1;
@@ -210,10 +235,12 @@ static int parse_function(ast_node_t **node) {
     fn->func.name = strdup(name.lexeme);
     if (!fn->func.name) {
         perr("failed to allocate memory for `fn->func.name`");
+        free(fn);
         return -1;
     }
     fn->func.params = NULL; // no params yet
     fn->func.param_count = 0;
+    fn->func.ret_type = ret_type;
     fn->func.body = body;
     *node = fn;
     return 0;

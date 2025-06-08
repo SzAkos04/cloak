@@ -3,6 +3,14 @@
 #include "literal.h"
 
 typedef enum {
+    TYPE_BOOL,
+    TYPE_FLOAT,
+    TYPE_INT,
+    TYPE_STRING,
+    TYPE_VOID,
+} type_t;
+
+typedef enum {
     AST_IDENTIFIER,
     AST_LITERAL,
     AST_BLOCK,
@@ -17,6 +25,7 @@ typedef struct {
     char *name;
     struct ast_node **params;
     int param_count;
+    type_t ret_type;
     struct ast_node *body;
 } ast_function_t;
 

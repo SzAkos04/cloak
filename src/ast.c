@@ -2,11 +2,29 @@
 
 #include <stdio.h>
 
+static const char *type_to_str(type_t type) {
+    switch (type) {
+    case TYPE_BOOL:
+        return "bool";
+    case TYPE_FLOAT:
+        return "float";
+    case TYPE_INT:
+        return "int";
+    case TYPE_STRING:
+        return "string";
+    case TYPE_VOID:
+        return "void";
+    }
+    return NULL;
+}
+
 static void debug_ast_node(ast_node_t *node, int indent) {
-    if (!node)
+    if (!node) {
         return;
-    for (int i = 0; i < indent; i++)
+    }
+    for (int i = 0; i < indent; i++) {
         printf("  ");
+    }
     switch (node->type) {
     case AST_IDENTIFIER:
         printf("AST_IDENTIFIER: %s\n", node->identifier.name);
@@ -14,7 +32,7 @@ static void debug_ast_node(ast_node_t *node, int indent) {
     case AST_LITERAL:
         switch (node->literal.kind) {
         case LITERAL_NUMBER:
-            printf("AST_LITERAL (number): %f\n", node->literal.number);
+            printf("AST_LITERAL (number): %g\n", node->literal.number);
             break;
         case LITERAL_STRING:
             printf("AST_LITERAL (string): \"%s\"\n", node->literal.string);
@@ -38,8 +56,8 @@ static void debug_ast_node(ast_node_t *node, int indent) {
         }
         break;
     case AST_FUNCTION:
-        printf("AST_FUNCTION: %s, params=%d\n", node->func.name,
-               node->func.param_count);
+        printf("AST_FUNCTION: %s, params=%d, return_type=%s\n", node->func.name,
+               node->func.param_count, type_to_str(node->func.ret_type));
         if (node->func.param_count > 0) {
             printf("Params:\n");
             for (int i = 0; i < node->func.param_count; i++) {
