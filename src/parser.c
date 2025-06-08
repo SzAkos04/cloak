@@ -447,9 +447,72 @@ static int parse_function(ast_node_t **node) {
     return 0;
 }
 
+static int parse_program(ast_node_t **node) {
+    ast_node_t **decls = NULL;
+    int decl_count = 0;
+
+    while (!is_at_end()) {
+        ast_node_t *decl = NULL;
+
+        // For now, only function declarations are supported as top-level decls.
+        // Extend this later if you want to parse global variables, etc.
+        if (peek().type == TOKEN_FN) {
+            if (parse_function(&decl) != 0) {
+                for (int i = 0; i < decl_count; i++) {
+                    free_ast_node(decls[i]);
+                }
+                free(decls);
+                return -1;
+            }
+        } else if (peek().type == TOKEN_EOF) {
+            break;
+        } else {
+            error("unexpected token `%s` at line %d, expected top-level "
+                  "declaration",
+                  peek().lexeme, peek().line);
+            for (int i = 0; i < decl_count; i++) {
+                free_ast_node(decls[i]);
+            }
+            free(decls);
+            return -1;
+        }
+
+        ast_node_t **tmp = (ast_node_t **)realloc(decls, sizeof(ast_node_t *) *
+                                                             (decl_count + 1));
+        if (!tmp) {
+            perr("parser: failed to allocate memory for declarations");
+            for (int i = 0; i < decl_count; i++) {
+                free_ast_node(decls[i]);
+            }
+            free(decls);
+            free_ast_node(decl);
+            return -1;
+        }
+        decls = tmp;
+        decls[decl_count++] = decl;
+    }
+
+    ast_node_t *program = (ast_node_t *)malloc(sizeof(ast_node_t));
+    if (!program) {
+        perr("parser: failed to allocate memory for program node");
+        for (int i = 0; i < decl_count; i++) {
+            free_ast_node(decls[i]);
+        }
+        free(decls);
+        return -1;
+    }
+
+    program->type = AST_PROGRAM;
+    program->program.decls = decls;
+    program->program.decl_count = decl_count;
+
+    *node = program;
+    return 0;
+}
+
 int parse_ast(ast_t **ast) {
     ast_node_t *root; // for now, one top-level function
-    if (parse_function(&root) != 0) {
+    if (parse_program(&root) != 0) {
         return -1;
     }
 

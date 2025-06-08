@@ -195,14 +195,14 @@ static int codegen_return(ast_node_t *node, LLVMBuilderRef builder,
         return -1;
     }
 
-    LLVMValueRef ret_val = NULL;
     if (node->return_stmt.value) {
         if (codegen_expression(node->return_stmt.value, builder, module,
-                               context, symtab, &ret_val) != 0) {
+                               context, symtab, ret) != 0) {
             return -1;
         }
+    } else {
+        *ret = NULL;
     }
-    *ret = LLVMBuildRet(builder, ret_val);
     return 0;
 }
 
@@ -216,8 +216,6 @@ static int codegen_block(ast_node_t *node, LLVMBuilderRef builder,
     LLVMValueRef last = NULL;
     for (int i = 0; i < node->block.stmt_count; ++i) {
         ast_node_t *stmt = node->block.stmt[i];
-        // debug("i=%d stmt_count=%d stmt ptr=%p\n", i, node->block.stmt_count,
-        //       (void *)node->block.stmt[i]);
         if (stmt->type == AST_RETURN) {
             if (codegen_return(stmt, builder, module, context, symtab, &last) !=
                 0) {
@@ -251,35 +249,9 @@ static int codegen_function(ast_node_t *node, LLVMModuleRef module,
         error("codegen_function called with non-function node");
         return -1;
     }
-    LLVMTypeRef ret_type;
-    switch (node->func.ret_type) {
-    case TYPE_BOOL:
-        ret_type = LLVMInt1TypeInContext(context);
-        break;
-    case TYPE_F32:
-        ret_type = LLVMFloatTypeInContext(context);
-        break;
-    case TYPE_F64:
-        ret_type = LLVMDoubleTypeInContext(context);
-        break;
-    case TYPE_I8:
-        ret_type = LLVMInt8TypeInContext(context);
-        break;
-    case TYPE_I16:
-        ret_type = LLVMInt16TypeInContext(context);
-        break;
-    case TYPE_I32:
-        ret_type = LLVMInt32TypeInContext(context);
-        break;
-    case TYPE_I64:
-        ret_type = LLVMInt64TypeInContext(context);
-        break;
-    case TYPE_STRING:
-        ret_type = LLVMPointerType(LLVMInt8TypeInContext(context), 0);
-        break;
-    case TYPE_VOID:
-        ret_type = LLVMVoidTypeInContext(context);
-        break;
+    LLVMTypeRef ret_type = get_llvm_type(node->func.ret_type, context);
+    if (!ret_type) {
+        return -1;
     }
     LLVMTypeRef func_type = LLVMFunctionType(ret_type, NULL, 0, false);
 
@@ -311,18 +283,8 @@ static int codegen_function(ast_node_t *node, LLVMModuleRef module,
 }
 
 int gen_IR(ast_t *ast, LLVMContextRef *context, LLVMModuleRef *module) {
-    if (ast->root->type != AST_FUNCTION) {
+    if (ast->root->type != AST_PROGRAM) {
         error("top-level node type not supported for codegen");
-        return -1;
-    }
-
-    if (strcmp(ast->root->func.name, "main") != 0) {
-        error("program must have a `main` function");
-        return -1;
-    }
-
-    if (ast->root->func.ret_type != TYPE_I32) {
-        error("`main` function must return i32");
         return -1;
     }
 
@@ -332,10 +294,33 @@ int gen_IR(ast_t *ast, LLVMContextRef *context, LLVMModuleRef *module) {
     symtab.head = NULL;
 
     LLVMValueRef func;
-    if (codegen_function(ast->root, *module, *context, &symtab, &func) != 0) {
-        LLVMDisposeModule(*module);
-        LLVMContextDispose(*context);
-        symbol_table_free(&symtab);
+    bool main_found = false;
+    for (int i = 0; i < ast->root->program.decl_count; ++i) {
+        if (ast->root->program.decls[i]->type == AST_FUNCTION) {
+            if (codegen_function(ast->root->program.decls[i], *module, *context,
+                                 &symtab, &func) != 0) {
+                symbol_table_free(&symtab);
+                LLVMDisposeModule(*module);
+                LLVMContextDispose(*context);
+                return -1;
+            }
+
+            if (strcmp(ast->root->program.decls[i]->func.name, "main") == 0) {
+                main_found = true;
+
+                if (ast->root->program.decls[i]->func.ret_type != TYPE_I32) {
+                    error("`main` function must return i32");
+                    symbol_table_free(&symtab);
+                    LLVMDisposeModule(*module);
+                    LLVMContextDispose(*context);
+                    return -1;
+                }
+            }
+        }
+    }
+
+    if (!main_found) {
+        error("program must have a `main` function");
         return -1;
     }
 

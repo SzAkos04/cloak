@@ -10,6 +10,12 @@ static void debug_ast_node(ast_node_t *node, int indent) {
         printf("  ");
     }
     switch (node->type) {
+    case AST_PROGRAM:
+        printf("AST_PROGRAM with %d declarations:\n", node->program.decl_count);
+        for (int i = 0; i < node->program.decl_count; i++) {
+            debug_ast_node(node->program.decls[i], indent + 1);
+        }
+        break;
     case AST_IDENTIFIER:
         printf("AST_IDENTIFIER: %s\n", node->identifier.name);
         break;

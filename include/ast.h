@@ -58,6 +58,8 @@ typedef struct {
 } literal_t;
 
 typedef enum {
+    AST_PROGRAM,
+
     AST_IDENTIFIER,
     AST_LITERAL,
     AST_BLOCK,
@@ -113,6 +115,7 @@ typedef struct ast_node {
 
     union {
         ast_program_t program;
+
         ast_function_t func;
         ast_let_t let;
         ast_return_t return_stmt;
