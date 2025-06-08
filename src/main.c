@@ -1,10 +1,14 @@
 #include "ast.h"
 #include "cli.h"
+#include "codegen.h"
 #include "fs_utils.h"
 #include "lexer.h"
+#include "llvm_codegen.h"
 #include "parser.h"
 #include "token.h"
 
+#include <llvm-c/Core.h>
+#include <llvm-c/Types.h>
 #include <stdlib.h>
 
 int main(int argc, char **argv) {
@@ -53,6 +57,18 @@ int main(int argc, char **argv) {
     debug_ast(ast);
 #endif
 
+    LLVMContextRef context;
+    LLVMModuleRef module;
+    if (gen_IR(ast, &context, &module) != 0) {
+        return -1;
+    }
+
+    if (gen_machine_code(module, "a.o") != 0) {
+        return -1;
+    }
+
+    LLVMDisposeModule(module);
+    LLVMContextDispose(context);
     free_tokens(tokens, token_count);
     free_ast(ast);
 

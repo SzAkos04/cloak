@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+void free_ast_node(ast_node_t *node);
+
 static parser_t parser;
 
 void parser_init(token_t *tokens, int count) {
@@ -59,6 +61,7 @@ static int parse_expression(ast_node_t **node) {
         lit->literal.kind = LITERAL_NUMBER;
         char *endptr;
         lit->literal.number = strtod(tok.lexeme, &endptr);
+        lit->literal.num_type = (strchr(tok.lexeme, '.') ? TYPE_F64 : TYPE_I32);
         if (endptr == tok.lexeme) {
             error("invalid number literal at line %d: %s", tok.line,
                   tok.lexeme);
@@ -107,18 +110,30 @@ static int parse_return(ast_node_t **node) {
         error("`return` keyword expected");
         return -1;
     }
-    ast_node_t *expr;
-    if (parse_expression(&expr) != 0) {
-        return -1;
-    }
+    ast_node_t *expr = NULL;
+
+    // check if next token is semicolon right after return (empty return)
     if (!match(TOKEN_SEMICOLON)) {
-        error("`;` expected");
-        return -1;
+        // if no semicolon, parse an expression
+        if (parse_expression(&expr) != 0) {
+            return -1;
+        }
+
+        if (!match(TOKEN_SEMICOLON)) {
+            error("`;` expected after return expression");
+            if (expr) {
+                free_ast_node(expr);
+            }
+            return -1;
+        }
     }
 
     ast_node_t *ret = malloc(sizeof(ast_node_t));
     if (!ret) {
         perr("failed to allocate memory for `ret`");
+        if (expr) {
+            free_ast_node(expr);
+        }
         return -1;
     }
     ret->type = AST_RETURN;
@@ -170,10 +185,18 @@ static int parse_block(ast_node_t **node) {
 static int parse_type(const char *str, type_t *type) {
     if (strcmp(str, "bool") == 0) {
         *type = TYPE_BOOL;
-    } else if (strcmp(str, "float") == 0) {
-        *type = TYPE_FLOAT;
-    } else if (strcmp(str, "int") == 0) {
-        *type = TYPE_INT;
+    } else if (strcmp(str, "f32") == 0) {
+        *type = TYPE_F32;
+    } else if (strcmp(str, "f64") == 0) {
+        *type = TYPE_F64;
+    } else if (strcmp(str, "i8") == 0) {
+        *type = TYPE_I8;
+    } else if (strcmp(str, "i16") == 0) {
+        *type = TYPE_I16;
+    } else if (strcmp(str, "i32") == 0) {
+        *type = TYPE_I32;
+    } else if (strcmp(str, "i64") == 0) {
+        *type = TYPE_I64;
     } else if (strcmp(str, "string") == 0) {
         *type = TYPE_STRING;
     } else if (strcmp(str, "void") == 0) {
@@ -212,7 +235,7 @@ static int parse_function(ast_node_t **node) {
         return -1;
     }
     token_t ret = peek();
-    if (!match(TOKEN_IDENTIFIER)) { // skip for now
+    if (!match(TOKEN_IDENTIFIER)) {
         error("return type expected");
         return -1;
     }
