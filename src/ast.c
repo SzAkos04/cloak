@@ -2,30 +2,6 @@
 
 #include <stdio.h>
 
-static const char *type_to_str(type_t type) {
-    switch (type) {
-    case TYPE_BOOL:
-        return "bool";
-    case TYPE_F32:
-        return "f32";
-    case TYPE_F64:
-        return "f64";
-    case TYPE_I8:
-        return "i8";
-    case TYPE_I16:
-        return "i16";
-    case TYPE_I32:
-        return "i32";
-    case TYPE_I64:
-        return "i64";
-    case TYPE_STRING:
-        return "string";
-    case TYPE_VOID:
-        return "void";
-    }
-    return NULL;
-}
-
 static void debug_ast_node(ast_node_t *node, int indent) {
     if (!node) {
         return;

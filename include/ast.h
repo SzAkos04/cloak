@@ -14,17 +14,30 @@ typedef enum {
     TYPE_VOID,
 } type_t;
 
-#define TYPE_TO_STR(type)                                                      \
-    ((type) == TYPE_BOOL     ? "bool"                                          \
-     : (type) == TYPE_F32    ? "f32"                                           \
-     : (type) == TYPE_F64    ? "f64"                                           \
-     : (type) == TYPE_I8     ? "i8"                                            \
-     : (type) == TYPE_I16    ? "i16"                                           \
-     : (type) == TYPE_I32    ? "i32"                                           \
-     : (type) == TYPE_I64    ? "i64"                                           \
-     : (type) == TYPE_STRING ? "string"                                        \
-     : (type) == TYPE_VOID   ? "void"                                          \
-                             : "unknown")
+static inline const char *type_to_str(type_t type) {
+    switch (type) {
+    case TYPE_BOOL:
+        return "bool";
+    case TYPE_F32:
+        return "f32";
+    case TYPE_F64:
+        return "f64";
+    case TYPE_I8:
+        return "i8";
+    case TYPE_I16:
+        return "i16";
+    case TYPE_I32:
+        return "i32";
+    case TYPE_I64:
+        return "i64";
+    case TYPE_STRING:
+        return "string";
+    case TYPE_VOID:
+        return "void";
+    default:
+        return "unknown";
+    }
+}
 
 typedef enum {
     LITERAL_NUMBER,

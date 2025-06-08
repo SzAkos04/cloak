@@ -73,7 +73,7 @@ static int codegen_expression(ast_node_t *node, LLVMBuilderRef builder,
                 return 0;
             default:
                 error("incorrect number type, found %s",
-                      TYPE_TO_STR(node->literal.num_type));
+                      type_to_str(node->literal.num_type));
                 return -1;
             }
         case LITERAL_STRING: {
@@ -169,7 +169,7 @@ static int codegen_assign(ast_node_t *node, LLVMBuilderRef builder,
     }
 
     if (!sym->is_mutable) {
-        error("cannot mutate unmutable variable");
+        error("cannot mutate unmutable variable `%s`", sym->name);
         return -1;
     }
 
@@ -312,17 +312,17 @@ static int codegen_function(ast_node_t *node, LLVMModuleRef module,
 
 int gen_IR(ast_t *ast, LLVMContextRef *context, LLVMModuleRef *module) {
     if (ast->root->type != AST_FUNCTION) {
-        error("Top-level node type not supported for codegen");
+        error("top-level node type not supported for codegen");
         return -1;
     }
 
     if (strcmp(ast->root->func.name, "main") != 0) {
-        error("Program must have a 'main' function");
+        error("program must have a `main` function");
         return -1;
     }
 
     if (ast->root->func.ret_type != TYPE_I32) {
-        error("'main' function must return i32");
+        error("`main` function must return i32");
         return -1;
     }
 

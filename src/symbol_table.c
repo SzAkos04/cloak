@@ -17,13 +17,13 @@ int symbol_table_add(symbol_table_t *symtab, const char *name,
 
     symbol_t *sym = (symbol_t *)malloc(sizeof(symbol_t));
     if (!sym) {
-        perr("failed to allocate memory for `sym`");
+        perr("symbol_table: failed to allocate memory for `sym` symbol");
         return -1;
     }
     sym->name = strdup(name);
     if (!sym->name) {
         free(sym);
-        perr("failed to allocate memory for `sym->name`");
+        perr("symbol_table: failed to allocate memory for `sym->name` string");
         return -1;
     }
     sym->value = value;

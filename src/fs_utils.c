@@ -10,7 +10,7 @@ char *read_file(const char *filename, size_t *file_size) {
 
     FILE *file = fopen(filename, "rb");
     if (file == NULL) {
-        perr("Failed to open `%s`", filename);
+        perr("failed to open `%s`", filename);
         return NULL;
     }
 
@@ -20,14 +20,14 @@ char *read_file(const char *filename, size_t *file_size) {
 
     char *buffer = (char *)malloc(*file_size + 1);
     if (buffer == NULL) {
-        perr("Failed to allocate memory to `%s` buffer", filename);
+        perr("failed to allocate memory to `%s` buffer", filename);
         fclose(file);
         return NULL;
     }
 
     size_t bytesRead = fread(buffer, 1, *file_size, file);
     if (bytesRead != *file_size) {
-        perr("Failed to read `%s`", filename);
+        perr("failed to read `%s`", filename);
         free(buffer);
         fclose(file);
         return NULL;

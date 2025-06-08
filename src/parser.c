@@ -39,7 +39,7 @@ static int parse_expression(ast_node_t **node) {
         advance();
         ast_node_t *id = (ast_node_t *)malloc(sizeof(ast_node_t));
         if (!id) {
-            perr("failed to allocate memory for `id`");
+            perr("parser: failed to allocate memory for `id` node");
             return -1;
         }
         id->type = AST_IDENTIFIER;
@@ -55,7 +55,7 @@ static int parse_expression(ast_node_t **node) {
         advance();
         ast_node_t *lit = (ast_node_t *)malloc(sizeof(ast_node_t));
         if (!lit) {
-            perr("failed to allocate memory for `lit`");
+            perr("parser: failed to allocate memory for `lit` node");
             return -1;
         }
         lit->type = AST_LITERAL;
@@ -75,14 +75,15 @@ static int parse_expression(ast_node_t **node) {
         advance();
         ast_node_t *lit = (ast_node_t *)malloc(sizeof(ast_node_t));
         if (!lit) {
-            perr("failed to allocate memory for `lit`");
+            perr("parser: failed to allocate memory for `lit` node");
             return -1;
         }
         lit->type = AST_LITERAL;
         lit->literal.kind = LITERAL_STRING;
         lit->literal.string = strdup(tok.lexeme);
         if (!lit->literal.string) {
-            perr("failed to allocate memory for `lit->literal.string`");
+            perr("parser: failed to allocate memory for `lit->literal.string` "
+                 "string");
             free(lit);
             return -1;
         }
@@ -92,7 +93,7 @@ static int parse_expression(ast_node_t **node) {
         advance();
         ast_node_t *lit = (ast_node_t *)malloc(sizeof(ast_node_t));
         if (!lit) {
-            perr("failed to allocate memory for `lit`");
+            perr("parser: failed to allocate memory for `lit` node");
             return -1;
         }
         lit->type = AST_LITERAL;
@@ -102,7 +103,8 @@ static int parse_expression(ast_node_t **node) {
         return 0;
     }
 
-    error("unexpected expression at line %d: `%s`", tok.line, tok.lexeme);
+    error("unexpected token `%s` (type %s) at line %d while parsing expression",
+          tok.lexeme, token_type_to_str(tok.type), tok.line);
     return -1;
 }
 
@@ -112,7 +114,9 @@ static int parse_expression(ast_node_t **node) {
 static int parse_assign(ast_node_t **node) {
     token_t name_tok = peek();
     if (name_tok.type != TOKEN_IDENTIFIER) {
-        error("identifier expected for assignment");
+        error("expected identifier before `=` at line %d, found "
+              "`%s`",
+              peek().line, peek().lexeme);
         return -1;
     }
 
@@ -137,7 +141,8 @@ static int parse_assign(ast_node_t **node) {
 
     // Expect semicolon after assignment
     if (!match(TOKEN_SEMICOLON)) {
-        error("`;` expected after assignment");
+        error("expected `;` after assignment at line %d, found `%s`",
+              peek().line, peek().lexeme);
         free_ast_node(value);
         return -1;
     }
@@ -145,21 +150,20 @@ static int parse_assign(ast_node_t **node) {
     // Build AST_ASSIGN node
     ast_node_t *assign = (ast_node_t *)malloc(sizeof(ast_node_t));
     if (!assign) {
-        perr("failed to allocate memory for `assign`");
+        perr("parser: failed to allocate memory for `assign` node");
         free_ast_node(value);
         return -1;
     }
 
     assign->type = AST_ASSIGN;
     assign->assign.name = strdup(name_tok.lexeme);
-    assign->assign.value = value;
-
     if (!assign->assign.name) {
-        perr("failed to allocate memory for assign->name");
+        perr("parser: failed to allocate memory for `assign->name` string");
         free_ast_node(value);
         free(assign);
         return -1;
     }
+    assign->assign.value = value;
 
     *node = assign;
     return 0;
@@ -194,7 +198,8 @@ static int parse_type(const char *str, type_t *type) {
 
 static int parse_let(ast_node_t **node) {
     if (!match(TOKEN_LET)) {
-        error("`let` keyword expected");
+        error("expected `let` keyword at line %d, found `%s`", peek().line,
+              peek().lexeme);
         return -1;
     }
 
@@ -205,7 +210,8 @@ static int parse_let(ast_node_t **node) {
 
     token_t name_tok = peek();
     if (!match(TOKEN_IDENTIFIER)) {
-        error("identifier expected after `let`");
+        error("expected identifier after `let` at line %d, found `%s`",
+              peek().line, peek().lexeme);
         return -1;
     }
 
@@ -213,7 +219,8 @@ static int parse_let(ast_node_t **node) {
     if (match(TOKEN_COLON)) {
         token_t type_tok = peek();
         if (!match(TOKEN_IDENTIFIER)) {
-            error("type expected after `:` in let binding");
+            error("expected type after `:` at line %d, found `%s`", peek().line,
+                  peek().lexeme);
             return -1;
         }
         if (parse_type(type_tok.lexeme, &type) != 0) {
@@ -222,7 +229,9 @@ static int parse_let(ast_node_t **node) {
     }
 
     if (type == TYPE_VOID) {
-        error("expected type for variable");
+        error(
+            "type annotation required for `let` binding at line %d, found `%s`",
+            peek().line, peek().lexeme);
         return -1;
     }
 
@@ -234,7 +243,8 @@ static int parse_let(ast_node_t **node) {
     }
 
     if (!match(TOKEN_SEMICOLON)) {
-        error("`;` expected after let binding");
+        error("expected `;` after let binding at line %d, found `%s`",
+              peek().line, peek().lexeme);
         if (value) {
             free_ast_node(value);
         }
@@ -243,7 +253,7 @@ static int parse_let(ast_node_t **node) {
 
     ast_node_t *let = (ast_node_t *)malloc(sizeof(ast_node_t));
     if (!let) {
-        perr("failed to allocate memory for `let` node");
+        perr("parser: failed to allocate memory for `let` node");
         if (value) {
             free_ast_node(value);
         }
@@ -252,16 +262,15 @@ static int parse_let(ast_node_t **node) {
 
     let->type = AST_LET;
     let->let.name = strdup(name_tok.lexeme);
-    let->let.is_mutable = is_mutable;
-    let->let.type = type;
-    let->let.value = value;
-
     if (!let->let.name) {
-        perr("failed to allocate memory for `let->let.name`");
+        perr("parser: failed to allocate memory for `let->let.name` string");
         free_ast_node(value);
         free(let);
         return -1;
     }
+    let->let.is_mutable = is_mutable;
+    let->let.type = type;
+    let->let.value = value;
 
     *node = let;
     return 0;
@@ -269,7 +278,8 @@ static int parse_let(ast_node_t **node) {
 
 static int parse_return(ast_node_t **node) {
     if (!match(TOKEN_RETURN)) {
-        error("`return` keyword expected");
+        error("expected `return` keyword at line %d, found `%s`", peek().line,
+              peek().lexeme);
         return -1;
     }
     ast_node_t *expr = NULL;
@@ -282,7 +292,8 @@ static int parse_return(ast_node_t **node) {
         }
 
         if (!match(TOKEN_SEMICOLON)) {
-            error("`;` expected after return expression");
+            error("expected `;` after return expression at line %d, found `%s`",
+                  peek().line, peek().lexeme);
             if (expr) {
                 free_ast_node(expr);
             }
@@ -292,7 +303,7 @@ static int parse_return(ast_node_t **node) {
 
     ast_node_t *ret = malloc(sizeof(ast_node_t));
     if (!ret) {
-        perr("failed to allocate memory for `ret`");
+        perr("parser: failed to allocate memory for `ret` node");
         if (expr) {
             free_ast_node(expr);
         }
@@ -306,7 +317,7 @@ static int parse_return(ast_node_t **node) {
 
 static int parse_block(ast_node_t **node) {
     if (!match(TOKEN_LBRACE)) {
-        error("`{` expected");
+        error("expected `{` line %d, found `%s`", peek().line, peek().lexeme);
         return -1;
     }
 
@@ -338,26 +349,28 @@ static int parse_block(ast_node_t **node) {
             break;
         }
         default:
-            error("unexpected statement");
+            error("unexpected token `%s` at line %d in block — expected `let`, "
+                  "`return`, or assignment",
+                  peek().lexeme, peek().line);
             return -1;
         }
         stmts = (ast_node_t **)realloc(stmts,
                                        sizeof(ast_node_t *) * (stmt_count + 1));
         if (!stmts) {
-            perr("failed to allocate memory for `stmts`");
+            perr("parser: failed to allocate memory for `stmts` nodes");
             return -1;
         }
         stmts[stmt_count++] = stmt;
     }
 
     if (is_at_end()) {
-        error("unexpected end of input; `}` expected");
+        error("unexpected end of input at line %d; `}` expected", peek().line);
         return -1;
     }
 
     ast_node_t *block = (ast_node_t *)malloc(sizeof(ast_node_t));
     if (!block) {
-        perr("failed to allocate memory for `block`");
+        perr("parser: failed to allocate memory for `block` node");
         return -1;
     }
     block->type = AST_BLOCK;
@@ -369,32 +382,39 @@ static int parse_block(ast_node_t **node) {
 
 static int parse_function(ast_node_t **node) {
     if (!match(TOKEN_FN)) {
-        error("`fn` expected");
+        error(
+            "expected `fn` to start function definition at line %d, found `%s`",
+            peek().line, peek().lexeme);
         return -1;
     }
 
     token_t name = peek();
     if (!match(TOKEN_IDENTIFIER)) {
-        error("function name expected");
+        error("expected identifier after `fn` at line %d, found `%s`",
+              peek().line, peek().lexeme);
         return -1;
     }
 
     if (!match(TOKEN_LPAREN)) {
-        error("`(` expected");
+        error("expected `(` after function name at line %d, found `%s`",
+              peek().line, peek().lexeme);
         return -1;
     }
     if (!match(TOKEN_RPAREN)) {
-        error("`)` expected");
+        error("expected `)` at line %d, found `%s`", peek().line,
+              peek().lexeme);
         return -1;
     }
 
     if (!match(TOKEN_COLON)) {
-        error("`:` expected");
+        error("expected `:` at line %d, found `%s`", peek().line,
+              peek().lexeme);
         return -1;
     }
     token_t ret = peek();
     if (!match(TOKEN_IDENTIFIER)) {
-        error("return type expected");
+        error("expected return type at line %d, found `%s`", peek().line,
+              peek().lexeme);
         return -1;
     }
     type_t ret_type;
@@ -409,13 +429,13 @@ static int parse_function(ast_node_t **node) {
 
     ast_node_t *fn = (ast_node_t *)malloc(sizeof(ast_node_t));
     if (!fn) {
-        perr("failed to allocate memory for `fn`");
+        perr("parser: failed to allocate memory for `fn` node");
         return -1;
     }
     fn->type = AST_FUNCTION;
     fn->func.name = strdup(name.lexeme);
     if (!fn->func.name) {
-        perr("failed to allocate memory for `fn->func.name`");
+        perr("parser: failed to allocate memory for `fn->func.name` string");
         free(fn);
         return -1;
     }
@@ -435,7 +455,7 @@ int parse_ast(ast_t **ast) {
 
     *ast = (ast_t *)malloc(sizeof(ast_t));
     if (!*ast) {
-        perr("Failed to allocate ast");
+        perr("Failed to allocate abstract syntax tree");
         return -1;
     }
     (*ast)->root = root;

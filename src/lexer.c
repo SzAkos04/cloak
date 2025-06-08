@@ -26,7 +26,7 @@ static int make_token(token_type_t type, token_t *token) {
     int len = lexer.current - lexer.start;
     char *lexeme = (char *)malloc(len + 1);
     if (!lexeme) {
-        perr("Failed to allocate memory for lexeme");
+        perr("lexer: failed to allocate memory for lexeme");
         return -1;
     }
 
@@ -110,7 +110,7 @@ static int string(token_t *token) {
     int len = (int)(lexer.current - lexer.start);
     char *lexeme = (char *)malloc(len - 1);
     if (!lexeme) {
-        perr("failed to allocate memory for string literal");
+        perr("lexer: failed to allocate memory for string literal");
         return -1;
     }
 
@@ -174,7 +174,8 @@ static int next_token(token_t *token) {
         if (isalpha(c) || c == '_') {
             return identifier(token);
         }
-        error("unknown token at line %d: `%c`", token->line, c);
+        error("unexpected character '%c' at line %d: unrecognized token", c,
+              lexer.line);
         return -1;
     }
 }
@@ -186,7 +187,7 @@ int lex(token_t **tokens) {
     int count = 0;
     *tokens = (token_t *)malloc(capacity * sizeof(token_t));
     if (!*tokens) {
-        perr("Failed to allocate memory to `tokens`");
+        perr("lexer: failed to allocate memory for token array");
         return -1;
     }
 
@@ -202,7 +203,7 @@ int lex(token_t **tokens) {
             token_t *new_tokens =
                 (token_t *)realloc(*tokens, capacity * sizeof(token_t));
             if (!new_tokens) {
-                perr("Failed to allocate memory to `tokens`");
+                perr("lexer: failed to allocate memory for token array");
                 free(*tokens);
                 return -1;
             }
