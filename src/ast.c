@@ -53,14 +53,21 @@ static void debug_ast_node(ast_node_t *node, int indent) {
             printf("AST_LITERAL (unknown kind)\n");
         }
         break;
-    case AST_RETURN:
-        printf("AST_RETURN:\n");
-        debug_ast_node(node->return_stmt.value, indent + 1);
-        break;
     case AST_BLOCK:
         printf("AST_BLOCK with %d statements:\n", node->block.stmt_count);
         for (int i = 0; i < node->block.stmt_count; i++) {
             debug_ast_node(node->block.stmt[i], indent + 1);
+        }
+        break;
+    case AST_ASSIGN:
+        printf("AST_ASSIGN: %s =\n", node->assign.name);
+        if (node->assign.value) {
+            debug_ast_node(node->assign.value, indent + 1);
+        } else {
+            for (int i = 0; i < indent + 1; i++) {
+                printf("  ");
+            }
+            printf("(no value)\n");
         }
         break;
     case AST_FUNCTION:
@@ -74,6 +81,23 @@ static void debug_ast_node(ast_node_t *node, int indent) {
         }
         printf("Body:\n");
         debug_ast_node(node->func.body, indent + 1);
+        break;
+    case AST_LET:
+        printf("AST_LET: name=%s, mutable=%s, type=%s\n", node->let.name,
+               node->let.is_mutable ? "true" : "false",
+               type_to_str(node->let.type));
+
+        if (node->let.value) {
+            for (int i = 0; i < indent + 1; i++) {
+                printf("  ");
+            }
+            printf("Value:\n");
+            debug_ast_node(node->let.value, indent + 2);
+        }
+        break;
+    case AST_RETURN:
+        printf("AST_RETURN:\n");
+        debug_ast_node(node->return_stmt.value, indent + 1);
         break;
     default:
         printf("AST_UNKNOWN_TYPE: %d\n", node->type);

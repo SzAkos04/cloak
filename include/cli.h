@@ -4,6 +4,7 @@
 
 typedef struct {
     const char *filename;
+    const char *outfile;
 
     bool show_help;
     bool show_version;

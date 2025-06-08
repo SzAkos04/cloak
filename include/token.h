@@ -16,6 +16,8 @@ typedef enum {
     TOKEN_BANGEQUAL,  // `!=`
 
     TOKEN_FN,     // `fn`
+    TOKEN_LET,    // `let`
+    TOKEN_MUT,    // `mut`
     TOKEN_RETURN, // `return`
 
     TOKEN_IDENTIFIER,

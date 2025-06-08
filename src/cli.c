@@ -9,6 +9,7 @@ bool silent = false;
 static int opts_default(cli_opts_t *opts) {
     *opts = (cli_opts_t){
         .filename = NULL,
+        .outfile = NULL,
         .show_help = false,
         .show_version = false,
     };
@@ -16,7 +17,8 @@ static int opts_default(cli_opts_t *opts) {
     return 0;
 }
 
-static int parse_long_arg(const char *arg, cli_opts_t *opts) {
+static int parse_long_arg(const char *arg, int *i, int argc, char **argv,
+                          cli_opts_t *opts) {
     if (strcmp(arg, "--help") == 0) {
         opts->show_help = true;
     } else if (strcmp(arg, "--version") == 0) {
@@ -29,6 +31,12 @@ static int parse_long_arg(const char *arg, cli_opts_t *opts) {
         silent = true;
     } else if (strcmp(arg, "--no-silent") == 0) {
         silent = false;
+    } else if (strcmp(arg, "--outfile") == 0) {
+        if (*i + 1 >= argc) {
+            error("--outfile requires a filename");
+            return -1;
+        }
+        opts->outfile = argv[++(*i)];
     } else {
         error("unknown argument `%s`, for more info run `cloak --help`", arg);
         return -1;
@@ -37,10 +45,26 @@ static int parse_long_arg(const char *arg, cli_opts_t *opts) {
     return 0;
 }
 
-static int parse_short_arg(const char *arg, cli_opts_t *opts) {
+static int parse_short_arg(const char *arg, int *i, int argc, char **argv,
+                           cli_opts_t *opts) {
     int len = strlen(arg);
-    for (int i = 1; i < len; ++i) {
-        switch (arg[i]) {
+    for (int j = 1; j < len; ++j) {
+        switch (arg[j]) {
+        case 'o':
+            // if -o is last char in this arg, output filename is next argv
+            if (j == len - 1) {
+                if (*i + 1 >= argc) {
+                    error("-o requires a filename");
+                    return -1;
+                }
+                opts->outfile = argv[++(*i)];
+                return 0;
+            } else {
+                // -o with filename immediately after e.g. -omyfile
+                opts->outfile = &arg[j + 1];
+                return 0;
+            }
+            break;
         case 'h':
             opts->show_help = true;
             break;
@@ -49,7 +73,7 @@ static int parse_short_arg(const char *arg, cli_opts_t *opts) {
             break;
         default:
             error("unknown argument `-%c`, for more info run `cloak --help`",
-                  arg[i]);
+                  arg[j]);
             return -1;
         }
     }
@@ -88,11 +112,11 @@ int parse_cli(int argc, char **argv, cli_opts_t *opts) {
             }
 
             if (arg[1] == '-') { // parse long args
-                if (parse_long_arg(arg, opts) != 0) {
+                if (parse_long_arg(arg, &i, argc, argv, opts) != 0) {
                     return -1;
                 }
             } else { // parse short args
-                if (parse_short_arg(arg, opts) != 0) {
+                if (parse_short_arg(arg, &i, argc, argv, opts) != 0) {
                     return -1;
                 }
             }
@@ -117,6 +141,9 @@ int parse_cli(int argc, char **argv, cli_opts_t *opts) {
     if (!opts->filename && !opts->show_help && !opts->show_version) {
         error("incorrect usage, for help run `cloak --help`");
         return -1;
+    }
+    if (!opts->outfile) {
+        opts->outfile = "./a.o";
     }
 
     return 0;

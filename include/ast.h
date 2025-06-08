@@ -48,8 +48,10 @@ typedef enum {
     AST_IDENTIFIER,
     AST_LITERAL,
     AST_BLOCK,
+    AST_ASSIGN,
 
     AST_FUNCTION,
+    AST_LET,
     AST_RETURN,
 } ast_node_type_t;
 
@@ -69,6 +71,13 @@ typedef struct {
 } ast_function_t;
 
 typedef struct {
+    char *name;
+    bool is_mutable;
+    type_t type;
+    struct ast_node *value;
+} ast_let_t;
+
+typedef struct {
     struct ast_node *value;
 } ast_return_t;
 
@@ -81,15 +90,22 @@ typedef struct {
     int stmt_count;
 } ast_block_t;
 
+typedef struct {
+    char *name;
+    struct ast_node *value;
+} ast_assign_t;
+
 typedef struct ast_node {
     ast_node_type_t type;
 
     union {
         ast_program_t program;
         ast_function_t func;
+        ast_let_t let;
         ast_return_t return_stmt;
         ast_identifier_t identifier;
         ast_block_t block;
+        ast_assign_t assign;
         literal_t literal;
     };
 } ast_node_t;

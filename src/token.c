@@ -25,6 +25,10 @@ static const char *token_type_to_str(token_type_t type) {
         return "TOKEN_BANGEQUAL";
     case TOKEN_FN:
         return "TOKEN_FN";
+    case TOKEN_LET:
+        return "TOKEN_LET";
+    case TOKEN_MUT:
+        return "TOKEN_MUT";
     case TOKEN_RETURN:
         return "TOKEN_RETURN";
     case TOKEN_IDENTIFIER:

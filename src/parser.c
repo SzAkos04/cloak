@@ -1,6 +1,7 @@
+#include "parser.h"
+
 #include "ast.h"
 #include "debug.h"
-#include "parser.h"
 #include "token.h"
 
 #include <stdbool.h>
@@ -105,6 +106,167 @@ static int parse_expression(ast_node_t **node) {
     return -1;
 }
 
+// if it's not an assignment node, returns 1
+// if it is returns 0
+// if it fails returns -1
+static int parse_assign(ast_node_t **node) {
+    token_t name_tok = peek();
+    if (name_tok.type != TOKEN_IDENTIFIER) {
+        error("identifier expected for assignment");
+        return -1;
+    }
+
+    // Save current position to backtrack if no assignment found
+    int saved_pos = parser.current;
+
+    // Consume identifier token
+    advance();
+
+    // Now check for '=' token
+    if (!match(TOKEN_EQUAL)) {
+        // Not an assignment, rewind parser current position and return failure
+        parser.current = saved_pos;
+        return 1;
+    }
+
+    // Parse the expression on the right side of '='
+    ast_node_t *value = NULL;
+    if (parse_expression(&value) != 0) {
+        return -1;
+    }
+
+    // Expect semicolon after assignment
+    if (!match(TOKEN_SEMICOLON)) {
+        error("`;` expected after assignment");
+        free_ast_node(value);
+        return -1;
+    }
+
+    // Build AST_ASSIGN node
+    ast_node_t *assign = (ast_node_t *)malloc(sizeof(ast_node_t));
+    if (!assign) {
+        perr("failed to allocate memory for `assign`");
+        free_ast_node(value);
+        return -1;
+    }
+
+    assign->type = AST_ASSIGN;
+    assign->assign.name = strdup(name_tok.lexeme);
+    assign->assign.value = value;
+
+    if (!assign->assign.name) {
+        perr("failed to allocate memory for assign->name");
+        free_ast_node(value);
+        free(assign);
+        return -1;
+    }
+
+    *node = assign;
+    return 0;
+}
+
+static int parse_type(const char *str, type_t *type) {
+    if (strcmp(str, "bool") == 0) {
+        *type = TYPE_BOOL;
+    } else if (strcmp(str, "f32") == 0) {
+        *type = TYPE_F32;
+    } else if (strcmp(str, "f64") == 0) {
+        *type = TYPE_F64;
+    } else if (strcmp(str, "i8") == 0) {
+        *type = TYPE_I8;
+    } else if (strcmp(str, "i16") == 0) {
+        *type = TYPE_I16;
+    } else if (strcmp(str, "i32") == 0) {
+        *type = TYPE_I32;
+    } else if (strcmp(str, "i64") == 0) {
+        *type = TYPE_I64;
+    } else if (strcmp(str, "string") == 0) {
+        *type = TYPE_STRING;
+    } else if (strcmp(str, "void") == 0) {
+        *type = TYPE_VOID;
+    } else {
+        error("unknown type: `%s`", str);
+        return -1;
+    }
+
+    return 0;
+}
+
+static int parse_let(ast_node_t **node) {
+    if (!match(TOKEN_LET)) {
+        error("`let` keyword expected");
+        return -1;
+    }
+
+    bool is_mutable = false;
+    if (match(TOKEN_MUT)) {
+        is_mutable = true;
+    }
+
+    token_t name_tok = peek();
+    if (!match(TOKEN_IDENTIFIER)) {
+        error("identifier expected after `let`");
+        return -1;
+    }
+
+    type_t type = TYPE_VOID;
+    if (match(TOKEN_COLON)) {
+        token_t type_tok = peek();
+        if (!match(TOKEN_IDENTIFIER)) {
+            error("type expected after `:` in let binding");
+            return -1;
+        }
+        if (parse_type(type_tok.lexeme, &type) != 0) {
+            return -1;
+        }
+    }
+
+    if (type == TYPE_VOID) {
+        error("expected type for variable");
+        return -1;
+    }
+
+    ast_node_t *value = NULL;
+    if (match(TOKEN_EQUAL)) {
+        if (parse_expression(&value) != 0) {
+            return -1;
+        }
+    }
+
+    if (!match(TOKEN_SEMICOLON)) {
+        error("`;` expected after let binding");
+        if (value) {
+            free_ast_node(value);
+        }
+        return -1;
+    }
+
+    ast_node_t *let = (ast_node_t *)malloc(sizeof(ast_node_t));
+    if (!let) {
+        perr("failed to allocate memory for `let` node");
+        if (value) {
+            free_ast_node(value);
+        }
+        return -1;
+    }
+
+    let->type = AST_LET;
+    let->let.name = strdup(name_tok.lexeme);
+    let->let.is_mutable = is_mutable;
+    let->let.type = type;
+    let->let.value = value;
+
+    if (!let->let.name) {
+        perr("failed to allocate memory for `let->let.name`");
+        free_ast_node(value);
+        free(let);
+        return -1;
+    }
+
+    *node = let;
+    return 0;
+}
+
 static int parse_return(ast_node_t **node) {
     if (!match(TOKEN_RETURN)) {
         error("`return` keyword expected");
@@ -153,7 +315,30 @@ static int parse_block(ast_node_t **node) {
 
     while (!match(TOKEN_RBRACE) && !is_at_end()) {
         ast_node_t *stmt;
-        if (parse_return(&stmt) != 0) {
+        token_t tok = peek();
+        switch (tok.type) {
+        case TOKEN_LET:
+            if (parse_let(&stmt) != 0) {
+                return -1;
+            }
+            break;
+        case TOKEN_RETURN:
+            if (parse_return(&stmt) != 0) {
+                return -1;
+            }
+            break;
+        case TOKEN_IDENTIFIER: {
+            int ret = parse_assign(&stmt);
+            if (ret < 0) {
+                return -1;
+            } else if (ret > 0) {
+                error("not yet implemented");
+                return -1;
+            }
+            break;
+        }
+        default:
+            error("unexpected statement");
             return -1;
         }
         stmts = (ast_node_t **)realloc(stmts,
@@ -179,33 +364,6 @@ static int parse_block(ast_node_t **node) {
     block->block.stmt = stmts;
     block->block.stmt_count = stmt_count;
     *node = block;
-    return 0;
-}
-
-static int parse_type(const char *str, type_t *type) {
-    if (strcmp(str, "bool") == 0) {
-        *type = TYPE_BOOL;
-    } else if (strcmp(str, "f32") == 0) {
-        *type = TYPE_F32;
-    } else if (strcmp(str, "f64") == 0) {
-        *type = TYPE_F64;
-    } else if (strcmp(str, "i8") == 0) {
-        *type = TYPE_I8;
-    } else if (strcmp(str, "i16") == 0) {
-        *type = TYPE_I16;
-    } else if (strcmp(str, "i32") == 0) {
-        *type = TYPE_I32;
-    } else if (strcmp(str, "i64") == 0) {
-        *type = TYPE_I64;
-    } else if (strcmp(str, "string") == 0) {
-        *type = TYPE_STRING;
-    } else if (strcmp(str, "void") == 0) {
-        *type = TYPE_VOID;
-    } else {
-        error("unknown type: `%s`", str);
-        return -1;
-    }
-
     return 0;
 }
 
@@ -307,6 +465,11 @@ void free_ast_node(ast_node_t *node) {
         free(node->block.stmt);
         break;
 
+    case AST_ASSIGN:
+        free(node->assign.name);
+        free_ast_node(node->assign.value);
+        break;
+
     case AST_FUNCTION:
         free(node->func.name);
         for (int i = 0; i < node->func.param_count; i++) {
@@ -314,6 +477,11 @@ void free_ast_node(ast_node_t *node) {
         }
         free(node->func.params);
         free_ast_node(node->func.body);
+        break;
+
+    case AST_LET:
+        free(node->let.name);
+        free_ast_node(node->let.value);
         break;
 
     case AST_RETURN:

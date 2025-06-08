@@ -1,6 +1,7 @@
 #include "ast.h"
 #include "cli.h"
 #include "codegen.h"
+#include "debug.h"
 #include "fs_utils.h"
 #include "lexer.h"
 #include "llvm_codegen.h"
@@ -63,7 +64,7 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    if (gen_machine_code(module, "a.o") != 0) {
+    if (gen_machine_code(module, opts.outfile) != 0) {
         return -1;
     }
 
