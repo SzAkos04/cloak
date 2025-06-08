@@ -6,13 +6,13 @@ static void debug_ast_node(ast_node_t *node, int indent) {
     if (!node) {
         return;
     }
-    for (int i = 0; i < indent; i++) {
+    for (int i = 0; i < indent; ++i) {
         printf("  ");
     }
     switch (node->type) {
     case AST_PROGRAM:
         printf("AST_PROGRAM with %d declarations:\n", node->program.decl_count);
-        for (int i = 0; i < node->program.decl_count; i++) {
+        for (int i = 0; i < node->program.decl_count; ++i) {
             debug_ast_node(node->program.decls[i], indent + 1);
         }
         break;
@@ -37,7 +37,7 @@ static void debug_ast_node(ast_node_t *node, int indent) {
         break;
     case AST_BLOCK:
         printf("AST_BLOCK with %d statements:\n", node->block.stmt_count);
-        for (int i = 0; i < node->block.stmt_count; i++) {
+        for (int i = 0; i < node->block.stmt_count; ++i) {
             debug_ast_node(node->block.stmt[i], indent + 1);
         }
         break;
@@ -46,7 +46,7 @@ static void debug_ast_node(ast_node_t *node, int indent) {
         if (node->assign.value) {
             debug_ast_node(node->assign.value, indent + 1);
         } else {
-            for (int i = 0; i < indent + 1; i++) {
+            for (int i = 0; i < indent + 1; ++i) {
                 printf("  ");
             }
             printf("(no value)\n");
@@ -56,10 +56,20 @@ static void debug_ast_node(ast_node_t *node, int indent) {
         printf("AST_FUNCTION: %s, params=%d, return_type=%s\n", node->func.name,
                node->func.param_count, type_to_str(node->func.ret_type));
         if (node->func.param_count > 0) {
+            for (int i = 0; i < indent; ++i) {
+                printf("  ");
+            }
             printf("Params:\n");
             for (int i = 0; i < node->func.param_count; i++) {
-                debug_ast_node(node->func.params[i], indent + 1);
+                for (int j = 0; j < indent + 1; ++j) {
+                    printf("  ");
+                }
+                printf("%s: %s\n", node->func.params[i].name,
+                       type_to_str(node->func.params[i].type));
             }
+        }
+        for (int i = 0; i < indent; ++i) {
+            printf("  ");
         }
         printf("Body:\n");
         debug_ast_node(node->func.body, indent + 1);
@@ -70,7 +80,7 @@ static void debug_ast_node(ast_node_t *node, int indent) {
                type_to_str(node->let.type));
 
         if (node->let.value) {
-            for (int i = 0; i < indent + 1; i++) {
+            for (int i = 0; i < indent + 1; ++i) {
                 printf("  ");
             }
             printf("Value:\n");

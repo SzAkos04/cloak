@@ -48,28 +48,18 @@ static int codegen_expression(ast_node_t *node, LLVMBuilderRef builder,
         case LITERAL_NUMBER:
             switch (node->literal.num_type) {
             case TYPE_F32:
-                *expr = LLVMConstReal(LLVMFloatTypeInContext(context),
-                                      node->literal.number);
-                return 0;
             case TYPE_F64:
-                *expr = LLVMConstReal(LLVMDoubleTypeInContext(context),
-                                      node->literal.number);
+                *expr = LLVMConstReal(
+                    get_llvm_type(node->literal.num_type, context),
+                    node->literal.number);
                 return 0;
             case TYPE_I8:
-                *expr = LLVMConstInt(LLVMInt8TypeInContext(context),
-                                     (uint64_t)node->literal.number, true);
-                return 0;
             case TYPE_I16:
-                *expr = LLVMConstInt(LLVMInt16TypeInContext(context),
-                                     (uint64_t)node->literal.number, true);
-                return 0;
             case TYPE_I32:
-                *expr = LLVMConstInt(LLVMInt32TypeInContext(context),
-                                     (uint64_t)node->literal.number, true);
-                return 0;
             case TYPE_I64:
-                *expr = LLVMConstInt(LLVMInt64TypeInContext(context),
-                                     (uint64_t)node->literal.number, true);
+                *expr =
+                    LLVMConstInt(get_llvm_type(node->literal.num_type, context),
+                                 (uint64_t)node->literal.number, true);
                 return 0;
             default:
                 error("incorrect number type, found %s",
@@ -97,13 +87,8 @@ static int codegen_expression(ast_node_t *node, LLVMBuilderRef builder,
             error("undefined variable `%s`", node->identifier.name);
             return -1;
         }
-        *expr = LLVMBuildLoad2(
-            builder,
-            LLVMTypeOf(sym->value), // or get_llvm_type of the variable's type
-            sym->value, node->identifier.name);
-        char *str = LLVMPrintValueToString(sym->value);
-        debug("%s", str);
-        LLVMDisposeMessage(str);
+        *expr = LLVMBuildLoad2(builder, LLVMTypeOf(sym->value), sym->value,
+                               node->identifier.name);
 
         return 0;
     }

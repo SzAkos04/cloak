@@ -531,6 +531,12 @@ void free_ast_node(ast_node_t *node) {
     }
 
     switch (node->type) {
+    case AST_PROGRAM:
+        for (int i = 0; i < node->program.decl_count; i++) {
+            free_ast_node(node->program.decls[i]);
+        }
+        free(node->program.decls);
+        break;
     case AST_IDENTIFIER:
         free(node->identifier.name);
         break;
@@ -555,9 +561,6 @@ void free_ast_node(ast_node_t *node) {
 
     case AST_FUNCTION:
         free(node->func.name);
-        for (int i = 0; i < node->func.param_count; i++) {
-            free_ast_node(node->func.params[i]);
-        }
         free(node->func.params);
         free_ast_node(node->func.body);
         break;

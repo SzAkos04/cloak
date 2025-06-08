@@ -79,7 +79,12 @@ typedef struct {
 
 typedef struct {
     char *name;
-    struct ast_node **params;
+    type_t type;
+} param_t;
+
+typedef struct {
+    char *name;
+    param_t *params;
     int param_count;
     type_t ret_type;
     struct ast_node *body;
