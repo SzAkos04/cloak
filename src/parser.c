@@ -33,10 +33,31 @@ static bool match(token_type_t type) {
     }
 }
 
-static int parse_expression(ast_node_t **node) {
+static int parse_expression(ast_node_t **node);
+static int parse_call(ast_node_t **node);
+
+static int parse_primary(ast_node_t **node) {
     token_t tok = peek();
+
+    if (tok.type == TOKEN_LPAREN) {
+        advance(); // consume '('
+        if (parse_expression(node) != 0)
+            return -1;
+        if (!match(TOKEN_RPAREN)) {
+            error("expected ')' after expression");
+            return -1;
+        }
+        return 0;
+    }
+
     if (tok.type == TOKEN_IDENTIFIER) {
+        token_t next = parser.tokens[parser.current + 1];
+        if (next.type == TOKEN_LPAREN) {
+            return parse_call(node);
+        }
+
         advance();
+
         ast_node_t *id = (ast_node_t *)malloc(sizeof(ast_node_t));
         if (!id) {
             perr("parser: failed to allocate memory for `id` node");
@@ -101,11 +122,124 @@ static int parse_expression(ast_node_t **node) {
         lit->literal.boolean = (strcmp(tok.lexeme, "true") == 0);
         *node = lit;
         return 0;
+    } else {
+        error("unexpected token `%s` (type %s) at line %d while parsing "
+              "expression",
+              tok.lexeme, token_type_to_str(tok.type), tok.line);
+        return -1;
+    }
+}
+
+static int parse_unary(ast_node_t **node) {
+    token_t tok = peek();
+    unary_op_t op;
+
+    if (is_unary_op(tok)) {
+        if (str_to_unary_op(tok.lexeme, &op) != 0) {
+            return -1;
+        }
+        advance(); // consume the operator
+        ast_node_t *right = NULL;
+        if (parse_unary(&right) != 0) {
+            return -1;
+        }
+
+        ast_node_t *unary = malloc(sizeof(ast_node_t));
+        if (!unary) {
+            perr("parser: failed to allocate memory for `unary` node");
+            return -1;
+        }
+
+        unary->type = AST_UNARY;
+        unary->unary.op = op;
+        unary->unary.right = right;
+        *node = unary;
+        return 0;
     }
 
-    error("unexpected token `%s` (type %s) at line %d while parsing expression",
-          tok.lexeme, token_type_to_str(tok.type), tok.line);
-    return -1;
+    return parse_primary(node);
+}
+
+static int get_binary_precedence(binary_op_t op) {
+    switch (op) {
+    case BIN_MUL:
+    case BIN_DIV:
+        return 6;
+    case BIN_ADD:
+    case BIN_SUB:
+        return 5;
+    case BIN_LT:
+    case BIN_LTE:
+    case BIN_GT:
+    case BIN_GTE:
+        return 4;
+    case BIN_EQ:
+    case BIN_NEQ:
+        return 3;
+    case BIN_AND:
+        return 2;
+    case BIN_OR:
+        return 1;
+    default:
+        return -1;
+    }
+}
+
+static int parse_binary_rhs(int min_prec, ast_node_t *lhs, ast_node_t **node) {
+    while (true) {
+        token_t tok = peek();
+        binary_op_t op;
+
+        if (!is_binary_op(tok) || str_to_binary_op(tok.lexeme, &op) != 0) {
+            break;
+        }
+
+        int prec = get_binary_precedence(op);
+        if (prec < min_prec) {
+            break;
+        }
+
+        advance(); // consume operator
+
+        ast_node_t *rhs = NULL;
+        if (parse_unary(&rhs) != 0) {
+            return -1;
+        }
+
+        token_t next = peek();
+        binary_op_t next_op;
+        while (is_binary_op(next) &&
+               str_to_binary_op(next.lexeme, &next_op) == 0 &&
+               get_binary_precedence(next_op) > prec) {
+            if (parse_binary_rhs(get_binary_precedence(next_op), rhs, &rhs) !=
+                0)
+                return -1;
+            next = peek();
+        }
+
+        ast_node_t *binary = (ast_node_t *)malloc(sizeof(ast_node_t));
+        if (!binary) {
+            perr("parser: failed to allocate memory for `binary` node");
+            return -1;
+        }
+
+        binary->type = AST_BINARY;
+        binary->binary.left = lhs;
+        binary->binary.op = op;
+        binary->binary.right = rhs;
+        lhs = binary;
+    }
+
+    *node = lhs;
+    return 0;
+}
+
+static int parse_expression(ast_node_t **node) {
+    ast_node_t *lhs = NULL;
+    if (parse_unary(&lhs) != 0) {
+        return -1;
+    }
+    return parse_binary_rhs(0, lhs, node);
 }
 
 // if it's not an assignment node, returns 1
@@ -127,7 +261,7 @@ static int parse_assign(ast_node_t **node) {
     advance();
 
     if (!match(TOKEN_EQUAL)) {
-        // not an assignment, rewind parser current position and return failure
+        // not an assignment, rewind parser current position and return
         parser.current = saved_pos;
         return 1;
     }
@@ -162,6 +296,92 @@ static int parse_assign(ast_node_t **node) {
     assign->assign.value = value;
 
     *node = assign;
+    return 0;
+}
+
+static int parse_call(ast_node_t **node) {
+    token_t name_tok = peek();
+    if (name_tok.type != TOKEN_IDENTIFIER) {
+        error("expected identifier at line %d, found `%s`", name_tok.line,
+              peek().lexeme);
+        return -1;
+    }
+    advance(); // consume identifier
+
+    if (!match(TOKEN_LPAREN)) {
+        error("expected `(` after function call at line %d, found `%s`",
+              peek().line, peek().lexeme);
+    }
+
+    ast_node_t *call = (ast_node_t *)malloc(sizeof(ast_node_t));
+    if (!call) {
+        perr("parser: failed to allocate memory for `call` node");
+        return -1;
+    }
+
+    // argument parsing
+    int capacity = 4;
+    int count = 0;
+    ast_node_t **args = malloc(sizeof(ast_node_t *) * capacity);
+    if (!args) {
+        perr("parser: failed to allocate memory for call arguments");
+        free(call->call.name);
+        free(call);
+        return -1;
+    }
+
+    if (!match(TOKEN_RPAREN)) {
+        do {
+            if (count >= capacity) {
+                capacity *= 2;
+                ast_node_t **new_args =
+                    realloc(args, sizeof(ast_node_t *) * capacity);
+                if (!new_args) {
+                    perr("parser: failed to reallocate memory for call "
+                         "arguments");
+                    for (int i = 0; i < count; ++i)
+                        free_ast_node(args[i]);
+                    free(args);
+                    free(call->call.name);
+                    free(call);
+                    return -1;
+                }
+                args = new_args;
+            }
+
+            ast_node_t *arg = NULL;
+            if (parse_expression(&arg) != 0) {
+                error("failed to parse function call argument at line %d",
+                      peek().line);
+                for (int i = 0; i < count; ++i)
+                    free_ast_node(args[i]);
+                free(args);
+                free(call->call.name);
+                free(call);
+                return -1;
+            }
+
+            args[count++] = arg;
+
+        } while (match(TOKEN_COMMA));
+    }
+
+    if (!match(TOKEN_RPAREN)) {
+        error("expected `)` at line %d, found `%s`", name_tok.line,
+              peek().lexeme);
+    }
+
+    call->type = AST_CALL;
+    call->call.name = strdup(name_tok.lexeme);
+    if (!call->call.name) {
+        perr("parser: failed to allocate memory for `call->name` string");
+        free(call);
+        return -1;
+    }
+    call->call.args = args;
+    call->call.param_count = count;
+
+    *node = call;
     return 0;
 }
 
@@ -297,7 +517,7 @@ static int parse_return(ast_node_t **node) {
         }
     }
 
-    ast_node_t *ret = malloc(sizeof(ast_node_t));
+    ast_node_t *ret = (ast_node_t *)malloc(sizeof(ast_node_t));
     if (!ret) {
         perr("parser: failed to allocate memory for `ret` node");
         if (expr) {
@@ -461,7 +681,6 @@ static int parse_function(ast_node_t **node) {
                 error("expected `,` or `)` after parameter at line %d, found "
                       "`%s`",
                       peek().line, peek().lexeme);
-                // free all param names and params array
                 for (int i = 0; i < param_count; i++) {
                     free(params[i].name);
                 }
@@ -501,6 +720,11 @@ static int parse_function(ast_node_t **node) {
     fn->func.name = strdup(name.lexeme);
     if (!fn->func.name) {
         perr("parser: failed to allocate memory for `fn->func.name` string");
+        for (int i = 0; i < param_count; i++) {
+            free(params[i].name);
+        }
+        free(params);
+        free_ast_node(body);
         free(fn);
         return -1;
     }
@@ -508,6 +732,7 @@ static int parse_function(ast_node_t **node) {
     fn->func.param_count = param_count;
     fn->func.ret_type = ret_type;
     fn->func.body = body;
+
     *node = fn;
     return 0;
 }
@@ -620,6 +845,23 @@ void free_ast_node(ast_node_t *node) {
     case AST_ASSIGN:
         free(node->assign.name);
         free_ast_node(node->assign.value);
+        break;
+
+    case AST_UNARY:
+        free_ast_node(node->unary.right);
+        break;
+
+    case AST_BINARY:
+        free_ast_node(node->binary.left);
+        free_ast_node(node->binary.right);
+        break;
+
+    case AST_CALL:
+        for (int i = 0; i < node->call.param_count; ++i) {
+            free_ast_node(node->call.args[i]);
+        }
+        free(node->call.args);
+        free(node->call.name);
         break;
 
     case AST_FUNCTION:

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stdbool.h>
 #include <stddef.h>
 
 typedef enum {
@@ -13,10 +14,27 @@ typedef enum {
     TOKEN_COMMA,     // `,`
 
     // one or two char tokens
-    TOKEN_EQUAL,      // `=`
-    TOKEN_EQUALEQUAL, // `==`
-    TOKEN_BANG,       // `!`
-    TOKEN_BANGEQUAL,  // `!=`
+    TOKEN_EQUAL,        // `=`
+    TOKEN_EQUALEQUAL,   // `==`
+    TOKEN_BANG,         // `!`
+    TOKEN_BANGEQUAL,    // `!=`
+    TOKEN_PLUS,         // `+`
+    TOKEN_PLUSEQUAL,    // `+=`
+    TOKEN_MINUS,        // `-`
+    TOKEN_MINUSEQUAL,   // `-=`
+    TOKEN_STAR,         // `*`
+    TOKEN_STAREQUAL,    // `*=`
+    TOKEN_SLASH,        // `/`
+    TOKEN_SLASHEQUAL,   // `/=`
+    TOKEN_PERCENT,      // `%`
+    TOKEN_PERCENTEQUAL, // ``
+    TOKEN_LESS,         // `<`
+    TOKEN_LESSEQUAL,    // `<=`
+    TOKEN_GREATER,      // `>`
+    TOKEN_GREATEREQUAL, // >=
+
+    TOKEN_AND, // `&&`
+    TOKEN_OR,  // `||`
 
     TOKEN_FN,     // `fn`
     TOKEN_LET,    // `let`
@@ -54,6 +72,34 @@ static inline const char *token_type_to_str(token_type_t type) {
         return "TOKEN_BANG";
     case TOKEN_BANGEQUAL:
         return "TOKEN_BANGEQUAL";
+    case TOKEN_PLUS:
+        return "TOKEN_PLUS";
+    case TOKEN_PLUSEQUAL:
+        return "TOKEN_PLUSEQUAL";
+    case TOKEN_MINUS:
+        return "TOKEN_MINUS";
+    case TOKEN_MINUSEQUAL:
+        return "TOKEN_MINUSEQUAL";
+    case TOKEN_STAR:
+        return "TOKEN_STAR";
+    case TOKEN_STAREQUAL:
+        return "TOKEN_STAREQUAL";
+    case TOKEN_SLASH:
+        return "TOKEN_SLASH";
+    case TOKEN_SLASHEQUAL:
+        return "TOKEN_SLASHEQUAL";
+    case TOKEN_LESS:
+        return "TOKEN_LESS";
+    case TOKEN_LESSEQUAL:
+        return "TOKEN_LESSEQUAL";
+    case TOKEN_GREATER:
+        return "TOKEN_GREATER";
+    case TOKEN_GREATEREQUAL:
+        return "TOKEN_GREATEREQUAL";
+    case TOKEN_AND:
+        return "TOKEN_AND";
+    case TOKEN_OR:
+        return "TOKEN_OR";
     case TOKEN_FN:
         return "TOKEN_FN";
     case TOKEN_LET:
@@ -85,3 +131,16 @@ typedef struct {
 } token_t;
 
 void debug_token(token_t token);
+
+static inline bool is_unary_op(token_t t) {
+    return t.type == TOKEN_MINUS || t.type == TOKEN_BANG;
+}
+
+static inline bool is_binary_op(token_t t) {
+    return t.type == TOKEN_PLUS || t.type == TOKEN_MINUS ||
+           t.type == TOKEN_STAR || t.type == TOKEN_SLASH ||
+           t.type == TOKEN_EQUALEQUAL || t.type == TOKEN_BANGEQUAL ||
+           t.type == TOKEN_LESS || t.type == TOKEN_LESSEQUAL ||
+           t.type == TOKEN_GREATER || t.type == TOKEN_GREATEREQUAL ||
+           t.type == TOKEN_AND || t.type == TOKEN_OR;
+}

@@ -50,6 +50,10 @@ static void skip_whitespace(void) {
         } else if (c == '\n') {
             lexer.line++;
             advance();
+        } else if (c == '/' && lexer.current[1] == '/') {
+            while (!is_at_end() && peek() != '\n') {
+                advance();
+            }
         } else {
             break;
         }
@@ -166,6 +170,73 @@ static int next_token(token_t *token) {
             return make_token(TOKEN_BANGEQUAL, token);
         } else {
             return make_token(TOKEN_BANG, token);
+        }
+    case '+':
+        if (peek() == '=') {
+            advance();
+            return make_token(TOKEN_PLUSEQUAL, token);
+        } else {
+            return make_token(TOKEN_PLUS, token);
+        }
+    case '-':
+        if (peek() == '=') {
+            advance();
+            return make_token(TOKEN_MINUSEQUAL, token);
+        } else {
+            return make_token(TOKEN_MINUS, token);
+        }
+    case '*':
+        if (peek() == '=') {
+            advance();
+            return make_token(TOKEN_STAREQUAL, token);
+        } else {
+            return make_token(TOKEN_STAR, token);
+        }
+    case '/':
+        if (peek() == '=') {
+            advance();
+            return make_token(TOKEN_SLASHEQUAL, token);
+        } else {
+            return make_token(TOKEN_SLASH, token);
+        }
+    case '%':
+        if (peek() == '=') {
+            advance();
+            return make_token(TOKEN_PERCENTEQUAL, token);
+        } else {
+            return make_token(TOKEN_PERCENT, token);
+        }
+    case '<':
+        if (peek() == '=') {
+            advance();
+            return make_token(TOKEN_LESSEQUAL, token);
+        } else {
+            return make_token(TOKEN_LESS, token);
+        }
+    case '>':
+        if (peek() == '=') {
+            advance();
+            return make_token(TOKEN_GREATEREQUAL, token);
+        } else {
+            return make_token(TOKEN_GREATER, token);
+        }
+    case '&':
+        if (peek() == '&') {
+            advance();
+            return make_token(TOKEN_AND, token);
+        } else {
+            error("unexpected character '%c' at line %d: unrecognized token", c,
+                  lexer.line);
+            return -1;
+        }
+    case '|':
+        if (peek() == '|') {
+            advance();
+            return make_token(TOKEN_OR, token);
+        } else {
+            error("unexpected character '%c' at line %d: unrecognized token", c,
+                  lexer.line);
+            return -1;
         }
     case '"':
         return string(token);

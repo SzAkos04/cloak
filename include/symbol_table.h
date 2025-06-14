@@ -6,6 +6,7 @@
 
 typedef struct symbol_s {
     char *name;
+    LLVMTypeRef type;
     LLVMValueRef value;
     bool is_mutable;
     struct symbol_s *next;
@@ -15,7 +16,7 @@ typedef struct {
     symbol_t *head;
 } symbol_table_t;
 
-int symbol_table_add(symbol_table_t *symtab, const char *name,
+int symbol_table_add(symbol_table_t *symtab, const char *name, LLVMTypeRef type,
                      LLVMValueRef value, bool is_mutable);
 symbol_t *symbol_table_lookup(symbol_table_t *symtab, const char *name);
 

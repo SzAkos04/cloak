@@ -39,14 +39,8 @@ static inline const char *type_to_str(type_t type) {
     }
 }
 
-typedef enum {
-    LITERAL_NUMBER,
-    LITERAL_STRING,
-    LITERAL_BOOL,
-} literal_type_t;
-
 typedef struct {
-    literal_type_t kind;
+    enum { LITERAL_NUMBER, LITERAL_STRING, LITERAL_BOOL } kind;
     union {
         struct {
             double number;
@@ -58,12 +52,41 @@ typedef struct {
 } literal_t;
 
 typedef enum {
+    UNARY_NEGATE,
+    UNARY_NOT,
+} unary_op_t;
+int str_to_unary_op(const char *str, unary_op_t *op);
+const char *unary_op_to_str(unary_op_t op);
+
+typedef enum {
+    BIN_ADD,
+    BIN_SUB,
+    BIN_MUL,
+    BIN_DIV,
+    BIN_MOD,
+    BIN_EQ,
+    BIN_NEQ,
+    BIN_LT,
+    BIN_LTE,
+    BIN_GT,
+    BIN_GTE,
+    BIN_AND,
+    BIN_OR
+} binary_op_t;
+int str_to_binary_op(const char *str, binary_op_t *op);
+const char *binary_op_to_str(binary_op_t op);
+
+typedef enum {
     AST_PROGRAM,
 
     AST_IDENTIFIER,
     AST_LITERAL,
     AST_BLOCK,
     AST_ASSIGN,
+    AST_UNARY,
+    AST_BINARY,
+
+    AST_CALL,
 
     AST_FUNCTION,
     AST_LET,
@@ -115,19 +138,39 @@ typedef struct {
     struct ast_node *value;
 } ast_assign_t;
 
+typedef struct {
+    unary_op_t op;
+    struct ast_node *right;
+} ast_unary_t;
+
+typedef struct {
+    struct ast_node *left;
+    binary_op_t op;
+    struct ast_node *right;
+} ast_binary_t;
+
+typedef struct {
+    char *name;
+    struct ast_node **args;
+    int param_count;
+} ast_call_t;
+
 typedef struct ast_node {
     ast_node_type_t type;
 
     union {
         ast_program_t program;
 
+        literal_t literal;
         ast_function_t func;
         ast_let_t let;
         ast_return_t return_stmt;
         ast_identifier_t identifier;
         ast_block_t block;
         ast_assign_t assign;
-        literal_t literal;
+        ast_unary_t unary;
+        ast_binary_t binary;
+        ast_call_t call;
     };
 } ast_node_t;
 
