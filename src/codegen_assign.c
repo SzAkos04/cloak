@@ -2,6 +2,7 @@
 
 #include "ast.h"
 #include "codegen_expr.h"
+#include "codegen_utils.h"
 #include "debug.h"
 #include "symbol_table.h"
 
@@ -31,6 +32,26 @@ int codegen_assign(ast_node_t *node, LLVMBuilderRef builder,
     LLVMValueRef val;
     if (codegen_expression(node->assign.value, builder, module, context, symtab,
                            &val) != 0) {
+        return -1;
+    }
+
+    // Get the type of the variable (a pointer) and dereference to get its base
+    // type
+    LLVMTypeRef expected_type = sym->type;
+    if (LLVMGetTypeKind(expected_type) == LLVMPointerTypeKind) {
+        expected_type = LLVMGetElementType(expected_type);
+    }
+
+    LLVMTypeRef actual_type = LLVMTypeOf(val);
+
+    // Type check
+    if (actual_type != expected_type) {
+        char *expected_str = LLVMPrintTypeToString(expected_type);
+        char *actual_str = LLVMPrintTypeToString(actual_type);
+        error("type mismatch in assignment to `%s`: expected `%s`, got `%s`",
+              sym->name, expected_str, actual_str);
+        LLVMDisposeMessage(expected_str);
+        LLVMDisposeMessage(actual_str);
         return -1;
     }
 

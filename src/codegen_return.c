@@ -28,12 +28,14 @@ int codegen_return(ast_node_t *node, LLVMBuilderRef builder,
         }
 
         LLVMTypeRef ret_type = LLVMTypeOf(*ret);
-        // Check for type mismatch
+        // check for type mismatch
         if (ret_type != expected_ret_type) {
+            const char *func_name = LLVMGetValueName(current_func);
             char *expected_str = LLVMPrintTypeToString(expected_ret_type);
             char *actual_str = LLVMPrintTypeToString(ret_type);
-            error("return type mismatch: expected `%s`, got `%s`", expected_str,
-                  actual_str);
+            error("return type mismatch for function `%s`: expected `%s`, got "
+                  "`%s`",
+                  func_name, expected_str, actual_str);
             LLVMDisposeMessage(expected_str);
             LLVMDisposeMessage(actual_str);
             return -1;
