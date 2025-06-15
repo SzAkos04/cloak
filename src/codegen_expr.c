@@ -128,7 +128,6 @@ int codegen_expression(ast_node_t *node, LLVMBuilderRef builder,
             *expr = is_float ? LLVMBuildFRem(builder, lhs, rhs, "modtmp")
                              : LLVMBuildSRem(builder, lhs, rhs, "modtmp");
             return 0;
-
         case BIN_EQ:
             *expr = is_float
                         ? LLVMBuildFCmp(builder, LLVMRealOEQ, lhs, rhs, "eqtmp")
@@ -146,11 +145,29 @@ int codegen_expression(ast_node_t *node, LLVMBuilderRef builder,
                     ? LLVMBuildFCmp(builder, LLVMRealOLT, lhs, rhs, "cmptmp")
                     : LLVMBuildICmp(builder, LLVMIntSLT, lhs, rhs, "cmptmp");
             return 0;
+        case BIN_LTE:
+            *expr =
+                is_float
+                    ? LLVMBuildFCmp(builder, LLVMRealOLE, lhs, rhs, "cmptmp")
+                    : LLVMBuildICmp(builder, LLVMIntSLE, lhs, rhs, "cmptmp");
+            return 0;
         case BIN_GT:
             *expr =
                 is_float
                     ? LLVMBuildFCmp(builder, LLVMRealOGT, lhs, rhs, "cmptmp")
                     : LLVMBuildICmp(builder, LLVMIntSGT, lhs, rhs, "cmptmp");
+            return 0;
+        case BIN_GTE:
+            *expr =
+                is_float
+                    ? LLVMBuildFCmp(builder, LLVMRealOGE, lhs, rhs, "cmptmp")
+                    : LLVMBuildICmp(builder, LLVMIntSGE, lhs, rhs, "cmptmp");
+            return 0;
+        case BIN_AND:
+            *expr = LLVMBuildAnd(builder, lhs, rhs, "andtmp");
+            return 0;
+        case BIN_OR:
+            *expr = LLVMBuildOr(builder, lhs, rhs, "ortmp");
             return 0;
         default:
             error("unsupported binary operator `%s`",
