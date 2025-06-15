@@ -42,6 +42,7 @@ typedef enum {
     TOKEN_LET,    // `let`
     TOKEN_MUT,    // `mut`
     TOKEN_RETURN, // `return`
+    TOKEN_WHILE,  // `while`
 
     TOKEN_IDENTIFIER,
 
@@ -114,6 +115,8 @@ static inline const char *token_type_to_str(token_type_t type) {
         return "TOKEN_MUT";
     case TOKEN_RETURN:
         return "TOKEN_RETURN";
+    case TOKEN_WHILE:
+        return "TOKEN_WHILE";
     case TOKEN_IDENTIFIER:
         return "TOKEN_IDENTIFIER";
     case TOKEN_NUMBER:

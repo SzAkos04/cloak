@@ -586,6 +586,48 @@ static int parse_return(ast_node_t **node) {
     return 0;
 }
 
+static int parse_while(ast_node_t **node) {
+    if (!match(TOKEN_WHILE)) {
+        error("expected `while` keyword at line %d, found `%s`", peek().line,
+              peek().lexeme);
+        return -1;
+    }
+
+    if (!match(TOKEN_LPAREN)) {
+        error("expected `(` after `while` keyword at line %d, found `%s`",
+              peek().line, peek().lexeme);
+        return -1;
+    }
+
+    ast_node_t *condition = NULL;
+    if (parse_expr(&condition) != 0) {
+        return -1;
+    }
+
+    if (!match(TOKEN_RPAREN)) {
+        error("expected `)` at line %d, found `%s`", peek().line,
+              peek().lexeme);
+        return -1;
+    }
+
+    ast_node_t *body = NULL;
+    if (parse_block(&body) != 0) {
+        return -1;
+    }
+
+    ast_node_t *while_stmt = (ast_node_t *)malloc(sizeof(ast_node_t));
+    if (!while_stmt) {
+        perr("parser: failed to allocate memory for `while` node");
+        return -1;
+    }
+    while_stmt->type = AST_WHILE;
+    while_stmt->while_stmt.condition = condition;
+    while_stmt->while_stmt.body = body;
+
+    *node = while_stmt;
+    return 0;
+}
+
 static int parse_block(ast_node_t **node) {
     if (!match(TOKEN_LBRACE)) {
         error("expected `{` line %d, found `%s`", peek().line, peek().lexeme);
@@ -611,6 +653,11 @@ static int parse_block(ast_node_t **node) {
             break;
         case TOKEN_RETURN:
             if (parse_return(&stmt) != 0) {
+                return -1;
+            }
+            break;
+        case TOKEN_WHILE:
+            if (parse_while(&stmt) != 0) {
                 return -1;
             }
             break;
@@ -950,7 +997,13 @@ void free_ast_node(ast_node_t *node) {
         free_ast_node(node->return_stmt.value);
         break;
 
+    case AST_WHILE:
+        free_ast_node(node->while_stmt.condition);
+        free_ast_node(node->while_stmt.body);
+        break;
+
     default:
+        warning("unsupported node type for freeing");
         break;
     }
 

@@ -223,6 +223,18 @@ static void debug_ast_node(ast_node_t *node, int indent) {
         debug_ast_node(node->return_stmt.value, indent + 1);
         break;
 
+    case AST_WHILE:
+        printf("AST_WHILE:\n");
+
+        print_indent(indent);
+        printf("Condition:\n");
+        debug_ast_node(node->if_stmt.condition, indent + 1);
+
+        print_indent(indent);
+        printf("Then:\n");
+        debug_ast_node(node->if_stmt.then_block, indent + 1);
+        break;
+
     default:
         printf("AST_UNKNOWN_TYPE: %d\n", node->type);
         break;

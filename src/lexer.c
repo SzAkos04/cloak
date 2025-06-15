@@ -84,6 +84,9 @@ static int identifier(token_t *token) {
     } else if (len == strlen("return") &&
                strncmp(lexer.start, "return", strlen("return")) == 0) {
         return make_token(TOKEN_RETURN, token);
+    } else if (len == strlen("while") &&
+               strncmp(lexer.start, "while", strlen("while")) == 0) {
+        return make_token(TOKEN_WHILE, token);
     } else if (len == strlen("true") &&
                strncmp(lexer.start, "true", strlen("true")) == 0) {
         return make_token(TOKEN_BOOL, token);

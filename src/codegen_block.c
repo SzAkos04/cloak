@@ -5,6 +5,7 @@
 #include "codegen_if.h"
 #include "codegen_let.h"
 #include "codegen_return.h"
+#include "codegen_while.h"
 #include "debug.h"
 #include "symbol_table.h"
 
@@ -25,14 +26,19 @@ int codegen_block(ast_node_t *node, LLVMBuilderRef builder,
                 0) {
                 return -1;
             }
+        } else if (stmt->type == AST_LET) {
+            if (codegen_let(stmt, builder, module, context, symtab, &last) !=
+                0) {
+                return -1;
+            }
         } else if (stmt->type == AST_RETURN) {
             if (codegen_return(stmt, builder, module, context, symtab, &last) !=
                 0) {
                 return -1;
             }
             break;
-        } else if (stmt->type == AST_LET) {
-            if (codegen_let(stmt, builder, module, context, symtab, &last) !=
+        } else if (stmt->type == AST_WHILE) {
+            if (codegen_while(stmt, builder, module, context, symtab, &last) !=
                 0) {
                 return -1;
             }

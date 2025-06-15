@@ -92,6 +92,7 @@ typedef enum {
     AST_IF,
     AST_LET,
     AST_RETURN,
+    AST_WHILE,
 } ast_node_type_t;
 
 struct ast_node;
@@ -130,6 +131,11 @@ typedef struct {
 typedef struct {
     struct ast_node *value;
 } ast_return_t;
+
+typedef struct {
+    struct ast_node *condition;
+    struct ast_node *body;
+} ast_while_t;
 
 typedef struct {
     char *name;
@@ -173,6 +179,7 @@ typedef struct ast_node {
         ast_if_t if_stmt;
         ast_let_t let;
         ast_return_t return_stmt;
+        ast_while_t while_stmt;
         ast_identifier_t identifier;
         ast_block_t block;
         ast_assign_t assign;
