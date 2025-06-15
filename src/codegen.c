@@ -21,25 +21,39 @@ int gen_IR(ast_t *ast, LLVMContextRef *context, LLVMModuleRef *module) {
 
     *context = LLVMContextCreate();
     *module = LLVMModuleCreateWithNameInContext("main_module", *context);
-    symbol_table_t symtab;
+    symbol_table_t symtab = {0};
     symtab.head = NULL;
 
-    LLVMValueRef func;
     bool main_found = false;
+
+    // First pass: declare all functions
     for (int i = 0; i < ast->root->program.decl_count; ++i) {
-        if (ast->root->program.decls[i]->type == AST_FUNCTION) {
-            if (codegen_fn(ast->root->program.decls[i], *module, *context,
-                           &symtab, &func) != 0) {
+        ast_node_t *decl = ast->root->program.decls[i];
+        if (decl->type == AST_FUNCTION) {
+            if (declare_fn(decl, *module, *context, &symtab) != 0) {
+                symbol_table_free(&symtab);
+                LLVMDisposeModule(*module);
+                LLVMContextDispose(*context);
+                return -1;
+            }
+        }
+    }
+
+    // Second pass: generate function bodies
+    for (int i = 0; i < ast->root->program.decl_count; ++i) {
+        ast_node_t *decl = ast->root->program.decls[i];
+        if (decl->type == AST_FUNCTION) {
+            LLVMValueRef func;
+            if (codegen_fn(decl, *module, *context, &symtab, &func) != 0) {
                 symbol_table_free(&symtab);
                 LLVMDisposeModule(*module);
                 LLVMContextDispose(*context);
                 return -1;
             }
 
-            if (strcmp(ast->root->program.decls[i]->func.name, "main") == 0) {
+            if (strcmp(decl->func.name, "main") == 0) {
                 main_found = true;
-
-                if (ast->root->program.decls[i]->func.ret_type != TYPE_I32) {
+                if (decl->func.ret_type != TYPE_I32) {
                     error("`main` function must return i32");
                     symbol_table_free(&symtab);
                     LLVMDisposeModule(*module);
@@ -52,6 +66,9 @@ int gen_IR(ast_t *ast, LLVMContextRef *context, LLVMModuleRef *module) {
 
     if (!main_found) {
         error("program must have a `main` function");
+        symbol_table_free(&symtab);
+        LLVMDisposeModule(*module);
+        LLVMContextDispose(*context);
         return -1;
     }
 
