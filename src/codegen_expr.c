@@ -184,23 +184,9 @@ int codegen_expression(ast_node_t *node, LLVMBuilderRef builder,
             }
         }
 
-        LLVMTypeRef callee_type = LLVMTypeOf(callee);
-        if (!callee_type) {
-            error("codegen: failed to get type of callee");
-            free(args);
-            return -1;
-        }
-
-        if (LLVMGetTypeKind(callee_type) != LLVMPointerTypeKind) {
-            error("codegen: expected a function pointer type, got %d",
-                  LLVMGetTypeKind(callee_type));
-            free(args);
-            return -1;
-        }
-
-        LLVMTypeRef func_type = LLVMGetElementType(callee_type);
+        LLVMTypeRef func_type = LLVMGlobalGetValueType(callee);
         if (!func_type) {
-            error("codegen: failed to get type of function");
+            error("codegen: failed to get type of callee");
             free(args);
             return -1;
         }
