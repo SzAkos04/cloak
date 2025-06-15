@@ -33,7 +33,7 @@ static bool match(token_type_t type) {
     }
 }
 
-static int parse_expression(ast_node_t **node);
+static int parse_expr(ast_node_t **node);
 static int parse_call(ast_node_t **node);
 
 static int parse_primary(ast_node_t **node) {
@@ -41,7 +41,7 @@ static int parse_primary(ast_node_t **node) {
 
     if (tok.type == TOKEN_LPAREN) {
         advance(); // consume '('
-        if (parse_expression(node) != 0)
+        if (parse_expr(node) != 0)
             return -1;
         if (!match(TOKEN_RPAREN)) {
             error("expected ')' after expression");
@@ -234,7 +234,7 @@ static int parse_binary_rhs(int min_prec, ast_node_t *lhs, ast_node_t **node) {
     return 0;
 }
 
-static int parse_expression(ast_node_t **node) {
+static int parse_expr(ast_node_t **node) {
     ast_node_t *lhs = NULL;
     if (parse_unary(&lhs) != 0) {
         return -1;
@@ -267,7 +267,7 @@ static int parse_assign(ast_node_t **node) {
     }
 
     ast_node_t *value = NULL;
-    if (parse_expression(&value) != 0) {
+    if (parse_expr(&value) != 0) {
         return -1;
     }
 
@@ -350,7 +350,7 @@ static int parse_call(ast_node_t **node) {
             }
 
             ast_node_t *arg = NULL;
-            if (parse_expression(&arg) != 0) {
+            if (parse_expr(&arg) != 0) {
                 error("failed to parse function call argument at line %d",
                       peek().line);
                 for (int i = 0; i < count; ++i)
@@ -412,6 +412,61 @@ static int parse_type(const char *str, type_t *type) {
     return 0;
 }
 
+static int parse_block(ast_node_t **node);
+
+static int parse_if(ast_node_t **node) {
+    if (!match(TOKEN_IF)) {
+        error("expected `if` keyword at line %d, found `%s`", peek().line,
+              peek().lexeme);
+        return -1;
+    }
+
+    if (!match(TOKEN_LPAREN)) {
+        error("expected `(` after `if` keyword at line %d, found `%s`",
+              peek().line, peek().lexeme);
+        return -1;
+    }
+
+    ast_node_t *condition = NULL;
+    if (parse_expr(&condition) != 0) {
+        return -1;
+    }
+
+    if (!match(TOKEN_RPAREN)) {
+        error("expected `)` at line %d, found `%s`", peek().line,
+              peek().lexeme);
+        return -1;
+    }
+
+    ast_node_t *then_block = NULL;
+    if (parse_block(&then_block) != 0) {
+        return -1;
+    }
+
+    ast_node_t *if_stmt = (ast_node_t *)malloc(sizeof(ast_node_t));
+    if (!if_stmt) {
+        perr("parser: failed to allocate memory for `if` node");
+        return -1;
+    }
+
+    ast_node_t *else_block = NULL;
+
+    if (match(TOKEN_ELSE)) {
+        if (parse_block(&else_block) != 0) {
+            free(if_stmt);
+            return -1;
+        }
+    }
+
+    if_stmt->type = AST_IF;
+    if_stmt->if_stmt.condition = condition;
+    if_stmt->if_stmt.then_block = then_block;
+    if_stmt->if_stmt.else_block = else_block;
+
+    *node = if_stmt;
+    return 0;
+}
+
 static int parse_let(ast_node_t **node) {
     if (!match(TOKEN_LET)) {
         error("expected `let` keyword at line %d, found `%s`", peek().line,
@@ -453,7 +508,7 @@ static int parse_let(ast_node_t **node) {
 
     ast_node_t *value = NULL;
     if (match(TOKEN_EQUAL)) {
-        if (parse_expression(&value) != 0) {
+        if (parse_expr(&value) != 0) {
             return -1;
         }
     }
@@ -503,7 +558,7 @@ static int parse_return(ast_node_t **node) {
     // check if next token is semicolon right after return (empty return)
     if (!match(TOKEN_SEMICOLON)) {
         // if no semicolon, parse an expression
-        if (parse_expression(&expr) != 0) {
+        if (parse_expr(&expr) != 0) {
             return -1;
         }
 
@@ -544,6 +599,11 @@ static int parse_block(ast_node_t **node) {
         ast_node_t *stmt;
         token_t tok = peek();
         switch (tok.type) {
+        case TOKEN_IF:
+            if (parse_if(&stmt) != 0) {
+                return -1;
+            }
+            break;
         case TOKEN_LET:
             if (parse_let(&stmt) != 0) {
                 return -1;
@@ -596,7 +656,7 @@ static int parse_block(ast_node_t **node) {
     return 0;
 }
 
-static int parse_function(ast_node_t **node) {
+static int parse_fn(ast_node_t **node) {
     if (!match(TOKEN_FN)) {
         error(
             "expected `fn` to start function definition at line %d, found `%s`",
@@ -745,7 +805,7 @@ static int parse_program(ast_node_t **node) {
         ast_node_t *decl = NULL;
 
         if (peek().type == TOKEN_FN) {
-            if (parse_function(&decl) != 0) {
+            if (parse_fn(&decl) != 0) {
                 for (int i = 0; i < decl_count; i++) {
                     free_ast_node(decls[i]);
                 }
@@ -871,6 +931,14 @@ void free_ast_node(ast_node_t *node) {
         }
         free(node->func.params);
         free_ast_node(node->func.body);
+        break;
+
+    case AST_IF:
+        free_ast_node(node->if_stmt.condition);
+        free_ast_node(node->if_stmt.then_block);
+        if (node->if_stmt.else_block) {
+            free_ast_node(node->if_stmt.else_block);
+        }
         break;
 
     case AST_LET:

@@ -8,9 +8,10 @@
 #include "parser.h"
 #include "token.h"
 
+#include <stdlib.h>
+
 #include <llvm-c/Core.h>
 #include <llvm-c/Types.h>
-#include <stdlib.h>
 
 int main(int argc, char **argv) {
     cli_opts_t opts;

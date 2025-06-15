@@ -40,8 +40,11 @@ int codegen_return(ast_node_t *node, LLVMBuilderRef builder,
             LLVMDisposeMessage(actual_str);
             return -1;
         }
+
+        LLVMBuildRet(builder, *ret);
     } else {
         *ret = NULL;
+        LLVMBuildRetVoid(builder);
     }
     return 0;
 }

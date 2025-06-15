@@ -36,7 +36,9 @@ typedef enum {
     TOKEN_AND, // `&&`
     TOKEN_OR,  // `||`
 
+    TOKEN_ELSE,   // `else`
     TOKEN_FN,     // `fn`
+    TOKEN_IF,     // `if`
     TOKEN_LET,    // `let`
     TOKEN_MUT,    // `mut`
     TOKEN_RETURN, // `return`
@@ -100,8 +102,12 @@ static inline const char *token_type_to_str(token_type_t type) {
         return "TOKEN_AND";
     case TOKEN_OR:
         return "TOKEN_OR";
+    case TOKEN_ELSE:
+        return "TOKEN_ELSE";
     case TOKEN_FN:
         return "TOKEN_FN";
+    case TOKEN_IF:
+        return "TOKEN_IF";
     case TOKEN_LET:
         return "TOKEN_LET";
     case TOKEN_MUT:

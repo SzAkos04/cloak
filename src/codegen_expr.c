@@ -221,7 +221,7 @@ int codegen_expression(ast_node_t *node, LLVMBuilderRef builder,
         return 0;
     }
     default:
-        error("unknown expression node type");
+        error("unknown expression node type `%d`", node->type);
         return -1;
     }
     return -1;

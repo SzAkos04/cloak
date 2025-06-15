@@ -190,6 +190,22 @@ static void debug_ast_node(ast_node_t *node, int indent) {
         debug_ast_node(node->func.body, indent + 1);
         break;
 
+    case AST_IF:
+        printf("AST_IF:\n");
+
+        print_indent(indent);
+        printf("Condition:\n");
+        debug_ast_node(node->if_stmt.condition, indent + 1);
+
+        print_indent(indent);
+        printf("Then:\n");
+        debug_ast_node(node->if_stmt.then_block, indent + 1);
+
+        print_indent(indent);
+        printf("Else:\n");
+        debug_ast_node(node->if_stmt.else_block, indent + 1);
+        break;
+
     case AST_LET:
         printf("AST_LET: name=%s, mutable=%s, type=%s\n", node->let.name,
                node->let.is_mutable ? "true" : "false",

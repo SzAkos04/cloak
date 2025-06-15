@@ -2,6 +2,7 @@
 
 #include "ast.h"
 #include "codegen_assign.h"
+#include "codegen_if.h"
 #include "codegen_let.h"
 #include "codegen_return.h"
 #include "debug.h"
@@ -19,12 +20,16 @@ int codegen_block(ast_node_t *node, LLVMBuilderRef builder,
     LLVMValueRef last = NULL;
     for (int i = 0; i < node->block.stmt_count; ++i) {
         ast_node_t *stmt = node->block.stmt[i];
-        if (stmt->type == AST_RETURN) {
+        if (stmt->type == AST_IF) {
+            if (codegen_if(stmt, builder, module, context, symtab, &last) !=
+                0) {
+                return -1;
+            }
+        } else if (stmt->type == AST_RETURN) {
             if (codegen_return(stmt, builder, module, context, symtab, &last) !=
                 0) {
                 return -1;
             }
-            // return terminates the block early
             break;
         } else if (stmt->type == AST_LET) {
             if (codegen_let(stmt, builder, module, context, symtab, &last) !=

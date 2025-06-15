@@ -66,8 +66,15 @@ static int identifier(token_t *token) {
     }
 
     int len = (int)(lexer.current - lexer.start);
-    if (len == strlen("fn") && strncmp(lexer.start, "fn", strlen("fn")) == 0) {
+    if (len == strlen("else") &&
+        strncmp(lexer.start, "else", strlen("else")) == 0) {
+        return make_token(TOKEN_ELSE, token);
+    } else if (len == strlen("fn") &&
+               strncmp(lexer.start, "fn", strlen("fn")) == 0) {
         return make_token(TOKEN_FN, token);
+    } else if (len == strlen("if") &&
+               strncmp(lexer.start, "if", strlen("if")) == 0) {
+        return make_token(TOKEN_IF, token);
     } else if (len == strlen("let") &&
                strncmp(lexer.start, "let", strlen("let")) == 0) {
         return make_token(TOKEN_LET, token);

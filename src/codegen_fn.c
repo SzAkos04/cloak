@@ -101,12 +101,14 @@ int codegen_fn(ast_node_t *node, LLVMModuleRef module, LLVMContextRef context,
 
     LLVMTypeRef ret_type = get_llvm_type(node->func.ret_type, context);
 
-    if (node->func.ret_type == TYPE_VOID) {
-        LLVMBuildRetVoid(builder);
-    } else if (ret_val) {
-        LLVMBuildRet(builder, ret_val);
-    } else {
-        LLVMBuildRet(builder, LLVMConstNull(ret_type));
+    if (!LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(builder))) {
+        if (node->func.ret_type == TYPE_VOID) {
+            LLVMBuildRetVoid(builder);
+        } else if (ret_val) {
+            LLVMBuildRet(builder, ret_val);
+        } else {
+            LLVMBuildRet(builder, LLVMConstNull(ret_type));
+        }
     }
 
     symbol_table_free(&local_symtab);
