@@ -161,6 +161,10 @@ static int next_token(token_t *token) {
         return make_token(TOKEN_LBRACE, token);
     case '}':
         return make_token(TOKEN_RBRACE, token);
+    case '[':
+        return make_token(TOKEN_LBRACKET, token);
+    case ']':
+        return make_token(TOKEN_RBRACKET, token);
     case ':':
         return make_token(TOKEN_COLON, token);
     case ';':

@@ -366,9 +366,12 @@ static int parse_call(ast_node_t **node) {
         } while (match(TOKEN_COMMA));
     }
 
-    if (!match(TOKEN_RPAREN)) {
-        error("expected `)` at line %d, found `%s`", name_tok.line,
-              peek().lexeme);
+    if (count != 0) {
+        if (!match(TOKEN_RPAREN)) {
+            error("expected `)` at line %d, found `%s`", name_tok.line,
+                  peek().lexeme);
+            return -1;
+        }
     }
 
     call->type = AST_CALL;
@@ -771,7 +774,7 @@ static int parse_fn(ast_node_t **node) {
             params[param_count].name = strdup(param_name_tok.lexeme);
             if (!params[param_count].name) {
                 perr("parser: failed to allocate memory for param name string");
-                for (int i = 0; i < param_count; i++) {
+                for (int i = 0; i < param_count; ++i) {
                     free(params[i].name);
                 }
                 free(params);
@@ -788,7 +791,7 @@ static int parse_fn(ast_node_t **node) {
                 error("expected `,` or `)` after parameter at line %d, found "
                       "`%s`",
                       peek().line, peek().lexeme);
-                for (int i = 0; i < param_count; i++) {
+                for (int i = 0; i < param_count; ++i) {
                     free(params[i].name);
                 }
                 free(params);
@@ -827,7 +830,7 @@ static int parse_fn(ast_node_t **node) {
     fn->func.name = strdup(name.lexeme);
     if (!fn->func.name) {
         perr("parser: failed to allocate memory for `fn->func.name` string");
-        for (int i = 0; i < param_count; i++) {
+        for (int i = 0; i < param_count; ++i) {
             free(params[i].name);
         }
         free(params);
@@ -853,7 +856,7 @@ static int parse_program(ast_node_t **node) {
 
         if (peek().type == TOKEN_FN) {
             if (parse_fn(&decl) != 0) {
-                for (int i = 0; i < decl_count; i++) {
+                for (int i = 0; i < decl_count; ++i) {
                     free_ast_node(decls[i]);
                 }
                 free(decls);
@@ -865,7 +868,7 @@ static int parse_program(ast_node_t **node) {
             error("unexpected token `%s` at line %d, expected top-level "
                   "declaration",
                   peek().lexeme, peek().line);
-            for (int i = 0; i < decl_count; i++) {
+            for (int i = 0; i < decl_count; ++i) {
                 free_ast_node(decls[i]);
             }
             free(decls);
@@ -876,7 +879,7 @@ static int parse_program(ast_node_t **node) {
                                                              (decl_count + 1));
         if (!tmp) {
             perr("parser: failed to allocate memory for declarations");
-            for (int i = 0; i < decl_count; i++) {
+            for (int i = 0; i < decl_count; ++i) {
                 free_ast_node(decls[i]);
             }
             free(decls);
@@ -890,7 +893,7 @@ static int parse_program(ast_node_t **node) {
     ast_node_t *program = (ast_node_t *)malloc(sizeof(ast_node_t));
     if (!program) {
         perr("parser: failed to allocate memory for program node");
-        for (int i = 0; i < decl_count; i++) {
+        for (int i = 0; i < decl_count; ++i) {
             free_ast_node(decls[i]);
         }
         free(decls);
@@ -927,7 +930,7 @@ void free_ast_node(ast_node_t *node) {
 
     switch (node->type) {
     case AST_PROGRAM:
-        for (int i = 0; i < node->program.decl_count; i++) {
+        for (int i = 0; i < node->program.decl_count; ++i) {
             free_ast_node(node->program.decls[i]);
         }
         free(node->program.decls);
@@ -943,7 +946,7 @@ void free_ast_node(ast_node_t *node) {
         break;
 
     case AST_BLOCK:
-        for (int i = 0; i < node->block.stmt_count; i++) {
+        for (int i = 0; i < node->block.stmt_count; ++i) {
             free_ast_node(node->block.stmt[i]);
         }
         free(node->block.stmt);
@@ -973,7 +976,7 @@ void free_ast_node(ast_node_t *node) {
 
     case AST_FUNCTION:
         free(node->func.name);
-        for (int i = 0; i < node->func.param_count; i++) {
+        for (int i = 0; i < node->func.param_count; ++i) {
             free(node->func.params[i].name);
         }
         free(node->func.params);

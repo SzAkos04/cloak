@@ -74,7 +74,7 @@ int codegen_fn(ast_node_t *node, LLVMModuleRef module, LLVMContextRef context,
     LLVMBuilderRef builder = LLVMCreateBuilderInContext(context);
     LLVMPositionBuilderAtEnd(builder, entry);
 
-    for (int i = 0; i < param_count; i++) {
+    for (int i = 0; i < param_count; ++i) {
         LLVMValueRef param_val = LLVMGetParam(function, i);
         LLVMTypeRef param_type = LLVMTypeOf(param_val);
 
