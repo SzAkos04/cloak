@@ -22,8 +22,8 @@ int codegen_return(ast_node_t *node, LLVMBuilderRef builder,
         LLVMGetReturnType(LLVMGlobalGetValueType(current_func));
 
     if (node->return_stmt.value) {
-        if (codegen_expression(node->return_stmt.value, builder, module,
-                               context, symtab, ret) != 0) {
+        if (codegen_expr(node->return_stmt.value, builder, module, context,
+                         symtab, ret) != 0) {
             return -1;
         }
 

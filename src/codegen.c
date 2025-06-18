@@ -53,7 +53,8 @@ int gen_IR(ast_t *ast, LLVMContextRef *context, LLVMModuleRef *module) {
 
             if (strcmp(decl->func.name, "main") == 0) {
                 main_found = true;
-                if (decl->func.ret_type != TYPE_I32) {
+                if (decl->func.ret_type.kind != TYPE_PRIMARY ||
+                    decl->func.ret_type.data.primary != TYPE_I32) {
                     error("`main` function must return i32");
                     symbol_table_free(&symtab);
                     LLVMDisposeModule(*module);

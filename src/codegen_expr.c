@@ -8,9 +8,9 @@
 #include <llvm-c/Types.h>
 #include <stdlib.h>
 
-int codegen_expression(ast_node_t *node, LLVMBuilderRef builder,
-                       LLVMModuleRef module, LLVMContextRef context,
-                       symbol_table_t *symtab, LLVMValueRef *expr) {
+int codegen_expr(ast_node_t *node, LLVMBuilderRef builder, LLVMModuleRef module,
+                 LLVMContextRef context, symbol_table_t *symtab,
+                 LLVMValueRef *expr) {
     (void)module;
     switch (node->type) {
     case AST_LITERAL:
@@ -20,21 +20,22 @@ int codegen_expression(ast_node_t *node, LLVMBuilderRef builder,
             case TYPE_F32:
             case TYPE_F64:
                 *expr = LLVMConstReal(
-                    get_llvm_type(node->literal.num_type, context),
+                    get_llvm_primary_type(node->literal.num_type, context),
                     node->literal.number);
                 return 0;
             case TYPE_I8:
             case TYPE_I16:
             case TYPE_I32:
             case TYPE_I64:
-                *expr =
-                    LLVMConstInt(get_llvm_type(node->literal.num_type, context),
-                                 (uint64_t)node->literal.number, true);
+                *expr = LLVMConstInt(
+                    get_llvm_primary_type(node->literal.num_type, context),
+                    (uint64_t)node->literal.number, true);
                 return 0;
-            default:
+            default: {
                 error("incorrect number type, found %s",
-                      type_to_str(node->literal.num_type));
+                      primary_type_to_str(node->literal.num_type));
                 return -1;
+            }
             }
         case LITERAL_STRING: {
             static int str_counter = 0;
@@ -66,8 +67,8 @@ int codegen_expression(ast_node_t *node, LLVMBuilderRef builder,
 
     case AST_UNARY: {
         LLVMValueRef operand;
-        if (codegen_expression(node->unary.right, builder, module, context,
-                               symtab, &operand) != 0) {
+        if (codegen_expr(node->unary.right, builder, module, context, symtab,
+                         &operand) != 0) {
             return -1;
         }
 
@@ -90,12 +91,12 @@ int codegen_expression(ast_node_t *node, LLVMBuilderRef builder,
 
     case AST_BINARY: {
         LLVMValueRef lhs, rhs;
-        if (codegen_expression(node->binary.left, builder, module, context,
-                               symtab, &lhs) != 0) {
+        if (codegen_expr(node->binary.left, builder, module, context, symtab,
+                         &lhs) != 0) {
             return -1;
         }
-        if (codegen_expression(node->binary.right, builder, module, context,
-                               symtab, &rhs) != 0) {
+        if (codegen_expr(node->binary.right, builder, module, context, symtab,
+                         &rhs) != 0) {
             return -1;
         }
 
@@ -194,8 +195,8 @@ int codegen_expression(ast_node_t *node, LLVMBuilderRef builder,
         }
 
         for (int i = 0; i < arg_count; ++i) {
-            if (codegen_expression(node->call.args[i], builder, module, context,
-                                   symtab, &args[i]) != 0) {
+            if (codegen_expr(node->call.args[i], builder, module, context,
+                             symtab, &args[i]) != 0) {
                 free(args);
                 return -1;
             }
@@ -218,6 +219,52 @@ int codegen_expression(ast_node_t *node, LLVMBuilderRef builder,
         *expr = LLVMBuildCall2(builder, func_type, callee, args, arg_count,
                                "calltmp");
         free(args);
+        return 0;
+    }
+    case AST_INDEX: {
+        // lookup the array symbol from the symbol table
+        symbol_t *arr =
+            symbol_table_lookup(symtab, node->index.array->identifier.name);
+        if (!arr) {
+            error("unknown array `%s`", node->index.array->identifier.name);
+            return -1;
+        }
+
+        LLVMValueRef array_ptr = arr->value;
+
+        // generate the index expression value
+        LLVMValueRef index_val;
+        if (codegen_expr(node->index.index, builder, module, context, symtab,
+                         &index_val) != 0) {
+            return -1;
+        }
+
+        LLVMValueRef elem_ptr;
+        if (LLVMGetTypeKind(arr->type) == LLVMArrayTypeKind) {
+            // pointer to array, so indices = [0, index]
+            LLVMValueRef indices[2];
+            indices[0] =
+                LLVMConstInt(LLVMInt32TypeInContext(context), 0, false);
+            indices[1] = index_val;
+
+            elem_ptr = LLVMBuildGEP2(builder, arr->type, array_ptr, indices, 2,
+                                     "elemptr");
+
+            // load type is the element type of the array
+            LLVMTypeRef elem_type = LLVMGetElementType(arr->type);
+            *expr = LLVMBuildLoad2(builder, elem_type, elem_ptr, "loadidx");
+
+        } else {
+            // pointer to element type (e.g. i32*), so only one index needed
+            LLVMValueRef indices[1];
+            indices[0] = index_val;
+
+            elem_ptr = LLVMBuildGEP2(builder, arr->type, array_ptr, indices, 1,
+                                     "elemptr");
+
+            *expr = LLVMBuildLoad2(builder, arr->type, elem_ptr, "loadidx");
+        }
+
         return 0;
     }
     default:

@@ -18,8 +18,8 @@ int codegen_if(ast_node_t *node, LLVMBuilderRef builder, LLVMModuleRef module,
     }
 
     LLVMValueRef cond = NULL;
-    if (codegen_expression(node->if_stmt.condition, builder, module, context,
-                           symtab, &cond) != 0) {
+    if (codegen_expr(node->if_stmt.condition, builder, module, context, symtab,
+                     &cond) != 0) {
         return -1;
     }
 

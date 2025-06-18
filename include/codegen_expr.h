@@ -5,6 +5,6 @@
 
 #include <llvm-c/Types.h>
 
-int codegen_expression(ast_node_t *node, LLVMBuilderRef builder,
-                       LLVMModuleRef module, LLVMContextRef context,
-                       symbol_table_t *symtab, LLVMValueRef *expr);
+int codegen_expr(ast_node_t *node, LLVMBuilderRef builder, LLVMModuleRef module,
+                 LLVMContextRef context, symbol_table_t *symtab,
+                 LLVMValueRef *expr);

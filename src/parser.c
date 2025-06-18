@@ -35,6 +35,28 @@ static bool match(token_type_t type) {
 
 static int parse_expr(ast_node_t **node);
 static int parse_call(ast_node_t **node);
+static int parse_index(ast_node_t **node);
+
+static int parse_postfix(ast_node_t **node) {
+    while (true) {
+        token_t tok = peek();
+
+        if (tok.type == TOKEN_LBRACKET) {
+            parser.current--; // so the functions know the identifier
+            if (parse_index(node) != 0) {
+                return -1;
+            }
+        } else if (tok.type == TOKEN_LPAREN) {
+            parser.current--; // so the functions know the identifier
+            if (parse_call(node) != 0) {
+                return -1;
+            }
+        } else {
+            break; // no more postfixes
+        }
+    }
+    return 0;
+}
 
 static int parse_primary(ast_node_t **node) {
     token_t tok = peek();
@@ -44,34 +66,33 @@ static int parse_primary(ast_node_t **node) {
         if (parse_expr(node) != 0)
             return -1;
         if (!match(TOKEN_RPAREN)) {
-            error("expected ')' after expression");
+            error("expected ')' after expression at line %d, found `%s`",
+                  tok.line, tok.lexeme);
             return -1;
         }
         return 0;
     }
 
     if (tok.type == TOKEN_IDENTIFIER) {
-        token_t next = parser.tokens[parser.current + 1];
-        if (next.type == TOKEN_LPAREN) {
-            return parse_call(node);
-        }
-
         advance();
 
-        ast_node_t *id = (ast_node_t *)malloc(sizeof(ast_node_t));
+        ast_node_t *id = malloc(sizeof(ast_node_t));
         if (!id) {
-            perr("parser: failed to allocate memory for `id` node");
+            perr("parser: failed to allocate memory for id node");
             return -1;
         }
         id->type = AST_IDENTIFIER;
         id->identifier.name = strdup(tok.lexeme);
         if (!id->identifier.name) {
-            perr("failed to allocate memory for `id->identifier.name`");
+            perr("failed to allocate memory for id->identifier.name");
             free(id);
             return -1;
         }
+
         *node = id;
-        return 0;
+
+        // Now parse postfix expressions (indexing, calls, etc.)
+        return parse_postfix(node);
     } else if (tok.type == TOKEN_NUMBER) {
         advance();
         ast_node_t *lit = (ast_node_t *)malloc(sizeof(ast_node_t));
@@ -242,23 +263,23 @@ static int parse_expr(ast_node_t **node) {
     return parse_binary_rhs(0, lhs, node);
 }
 
+static int parse_assignable(ast_node_t **node);
+
 // if it's not an assignment node, returns 1
 // if it is returns 0
 // if it fails returns -1
-static int parse_assign(ast_node_t **node) {
-    token_t name_tok = peek();
-    if (name_tok.type != TOKEN_IDENTIFIER) {
-        error("expected identifier before `=` at line %d, found "
-              "`%s`",
-              peek().line, peek().lexeme);
-        return -1;
-    }
 
-    // save current position to backtrack if no assignment found
+static int MAYBE_UNUSED parse_assign(ast_node_t **node) {
+    // Save current position for backtracking
     int saved_pos = parser.current;
 
-    // consume identifier token
-    advance();
+    // Parse the LHS as assignable expression (identifier or index)
+    ast_node_t *lhs = NULL;
+    int res = parse_assignable(&lhs);
+    if (res != 0) {
+        parser.current = saved_pos; // backtrack
+        return res;                 // could be -1 or 1
+    }
 
     if (!match(TOKEN_EQUAL)) {
         // not an assignment, rewind parser current position and return
@@ -286,13 +307,7 @@ static int parse_assign(ast_node_t **node) {
     }
 
     assign->type = AST_ASSIGN;
-    assign->assign.name = strdup(name_tok.lexeme);
-    if (!assign->assign.name) {
-        perr("parser: failed to allocate memory for `assign->name` string");
-        free_ast_node(value);
-        free(assign);
-        return -1;
-    }
+    assign->assign.lhs = lhs;
     assign->assign.value = value;
 
     *node = assign;
@@ -339,8 +354,9 @@ static int parse_call(ast_node_t **node) {
                 if (!new_args) {
                     perr("parser: failed to reallocate memory for call "
                          "arguments");
-                    for (int i = 0; i < count; ++i)
+                    for (int i = 0; i < count; ++i) {
                         free_ast_node(args[i]);
+                    }
                     free(args);
                     free(call->call.name);
                     free(call);
@@ -353,8 +369,9 @@ static int parse_call(ast_node_t **node) {
             if (parse_expr(&arg) != 0) {
                 error("failed to parse function call argument at line %d",
                       peek().line);
-                for (int i = 0; i < count; ++i)
+                for (int i = 0; i < count; ++i) {
                     free_ast_node(args[i]);
+                }
                 free(args);
                 free(call->call.name);
                 free(call);
@@ -388,27 +405,174 @@ static int parse_call(ast_node_t **node) {
     return 0;
 }
 
-static int parse_type(const char *str, type_t *type) {
-    if (strcmp(str, "bool") == 0) {
-        *type = TYPE_BOOL;
-    } else if (strcmp(str, "f32") == 0) {
-        *type = TYPE_F32;
-    } else if (strcmp(str, "f64") == 0) {
-        *type = TYPE_F64;
-    } else if (strcmp(str, "i8") == 0) {
-        *type = TYPE_I8;
-    } else if (strcmp(str, "i16") == 0) {
-        *type = TYPE_I16;
-    } else if (strcmp(str, "i32") == 0) {
-        *type = TYPE_I32;
-    } else if (strcmp(str, "i64") == 0) {
-        *type = TYPE_I64;
-    } else if (strcmp(str, "string") == 0) {
-        *type = TYPE_STRING;
-    } else if (strcmp(str, "void") == 0) {
-        *type = TYPE_VOID;
+// if it's not an index node, returns 1
+// if it is returns 0
+// if it fails returns -1
+static int parse_index(ast_node_t **node) {
+    token_t name_tok = peek();
+    if (name_tok.type != TOKEN_IDENTIFIER) {
+        error("expected identifier at line %d, found `%s`", peek().line,
+              peek().lexeme);
+        return -1;
+    }
+
+    ast_node_t *array = (ast_node_t *)malloc(sizeof(ast_node_t));
+    if (!array) {
+        perr("parser: failed to allocate memory for `array` node");
+        return -1;
+    }
+    array->type = AST_IDENTIFIER;
+    array->identifier.name = strdup(name_tok.lexeme);
+    if (!array->identifier.name) {
+        perr("parser: failed to allocate memory for `array->identifier.name`");
+        free(array);
+        return -1;
+    }
+
+    // save current position to backtrack if no index found
+    int saved_pos = parser.current;
+
+    // consume identifier token
+    advance();
+
+    if (!match(TOKEN_LBRACKET)) {
+        parser.current = saved_pos;
+        free_ast_node(array);
+        return 1;
+    }
+
+    ast_node_t *index = NULL;
+    if (parse_expr(&index) != 0) {
+        free_ast_node(array);
+        return -1;
+    }
+
+    if (!match(TOKEN_RBRACKET)) {
+        error("expected `]` at line %d, found `%s`", peek().line,
+              peek().lexeme);
+        free_ast_node(index);
+        free_ast_node(array);
+        return -1;
+    }
+
+    ast_node_t *idx = (ast_node_t *)malloc(sizeof(ast_node_t));
+    if (!idx) {
+        perr("parser: failed to allocate memoryf for `index` node");
+        free_ast_node(index);
+        free_ast_node(array);
+        return -1;
+    }
+    idx->type = AST_INDEX;
+    idx->index.array = array;
+    idx->index.index = index;
+
+    *node = idx;
+    return 0;
+}
+
+static int parse_type(type_t *type) {
+    if (strcmp(peek().lexeme, "arr") == 0) {
+        advance();
+        if (!match(TOKEN_LESS)) {
+            error("expected '<' after `arr` at line %d, found `%s`",
+                  peek().line, peek().lexeme);
+            return -1;
+        }
+
+        type_t *arr_type = (type_t *)malloc(sizeof(type_t));
+        if (!arr_type) {
+            perr("parser: failed to allocate memory for `arr_type`");
+            return -1;
+        }
+        if (parse_type(arr_type) != 0) {
+            return -1;
+        }
+
+        if (!match(TOKEN_COMMA)) {
+            error("expected ',' at line %d, found `%s`", peek().line,
+                  peek().lexeme);
+            return -1;
+        }
+
+        // parse length
+        int length;
+        char *endptr;
+        long val = strtol(peek().lexeme, &endptr, 10);
+        if (endptr == peek().lexeme) {
+            error("expected integer for array length at line %d, found `%s`",
+                  peek().line, peek().lexeme);
+            return -1;
+        }
+        length = (int)val;
+        advance();
+
+        if (!match(TOKEN_GREATER)) {
+            error("expected '>' at line %d, found `%s`", peek().line,
+                  peek().lexeme);
+            return -1;
+        }
+
+        *type = (type_t){
+            .kind = TYPE_ARRAY,
+            .data.array.type = arr_type,
+            .data.array.length = length,
+        };
+    } else if (strcmp(peek().lexeme, "bool") == 0) {
+        *type = (type_t){
+            .kind = TYPE_PRIMARY,
+            .data.primary = TYPE_BOOL,
+        };
+        advance();
+    } else if (strcmp(peek().lexeme, "f32") == 0) {
+        *type = (type_t){
+            .kind = TYPE_PRIMARY,
+            .data.primary = TYPE_F32,
+        };
+        advance();
+    } else if (strcmp(peek().lexeme, "f64") == 0) {
+        *type = (type_t){
+            .kind = TYPE_PRIMARY,
+            .data.primary = TYPE_F64,
+        };
+        advance();
+    } else if (strcmp(peek().lexeme, "i8") == 0) {
+        *type = (type_t){
+            .kind = TYPE_PRIMARY,
+            .data.primary = TYPE_I8,
+        };
+        advance();
+    } else if (strcmp(peek().lexeme, "i16") == 0) {
+        *type = (type_t){
+            .kind = TYPE_PRIMARY,
+            .data.primary = TYPE_I16,
+        };
+        advance();
+    } else if (strcmp(peek().lexeme, "i32") == 0) {
+        *type = (type_t){
+            .kind = TYPE_PRIMARY,
+            .data.primary = TYPE_I32,
+        };
+        advance();
+    } else if (strcmp(peek().lexeme, "i64") == 0) {
+        *type = (type_t){
+            .kind = TYPE_PRIMARY,
+            .data.primary = TYPE_I64,
+        };
+        advance();
+    } else if (strcmp(peek().lexeme, "string") == 0) {
+        *type = (type_t){
+            .kind = TYPE_PRIMARY,
+            .data.primary = TYPE_STRING,
+        };
+        advance();
+    } else if (strcmp(peek().lexeme, "void") == 0) {
+        *type = (type_t){
+            .kind = TYPE_PRIMARY,
+            .data.primary = TYPE_VOID,
+        };
+        advance();
     } else {
-        error("unknown type: `%s`", str);
+        error("unknown type `%s` on line %d", peek().lexeme, peek().line);
         return -1;
     }
 
@@ -489,20 +653,14 @@ static int parse_let(ast_node_t **node) {
         return -1;
     }
 
-    type_t type = TYPE_VOID;
+    type_t type = type_void();
     if (match(TOKEN_COLON)) {
-        token_t type_tok = peek();
-        if (!match(TOKEN_IDENTIFIER)) {
-            error("expected type after `:` at line %d, found `%s`", peek().line,
-                  peek().lexeme);
-            return -1;
-        }
-        if (parse_type(type_tok.lexeme, &type) != 0) {
+        if (parse_type(&type) != 0) {
             return -1;
         }
     }
 
-    if (type == TYPE_VOID) {
+    if (type.kind == TYPE_PRIMARY && type.data.primary == TYPE_VOID) {
         error(
             "type annotation required for `let` binding at line %d, found `%s`",
             peek().line, peek().lexeme);
@@ -631,6 +789,78 @@ static int parse_while(ast_node_t **node) {
     return 0;
 }
 
+static int parse_assignable(ast_node_t **node) {
+    token_t tok = peek();
+    if (tok.type != TOKEN_IDENTIFIER) {
+        error("expected identifier at line %d, found `%s`", peek().line,
+              peek().lexeme);
+        return -1;
+    }
+
+    // Try parsing index first
+    ast_node_t *lhs = NULL;
+    int idx_res = parse_index(&lhs);
+    if (idx_res == -1)
+        return -1;
+
+    // If no index, try simple identifier node
+    if (idx_res == 1) {
+        // Not an index, just simple identifier
+        lhs = (ast_node_t *)malloc(sizeof(ast_node_t));
+        lhs->type = AST_IDENTIFIER;
+        lhs->identifier.name = strdup(tok.lexeme);
+        if (!lhs->identifier.name) {
+            perr(
+                "parser: failed to allocate memory for `lhs->identifier.name`");
+            free(lhs);
+            return -1;
+        }
+        advance();
+    }
+
+    // Now expect '='
+    if (!match(TOKEN_EQUAL)) {
+        // Not assignment, backtrack
+        free_ast_node(lhs);
+        return 1;
+    }
+
+    ast_node_t *rhs = NULL;
+    if (parse_expr(&rhs) != 0) {
+        free_ast_node(lhs);
+        return -1;
+    }
+
+    if (!match(TOKEN_SEMICOLON)) {
+        error("expected `;` at line %d, found `%s`", peek().line,
+              peek().lexeme);
+        free_ast_node(lhs);
+        free_ast_node(rhs);
+        return -1;
+    }
+
+    ast_node_t *assign = (ast_node_t *)malloc(sizeof(ast_node_t));
+    if (!assign) {
+        perr("parser: failed to allocate memory for `assign` node");
+        free_ast_node(lhs);
+        free_ast_node(rhs);
+        return -1;
+    }
+
+    assign->type = AST_ASSIGN;
+
+    // For assignment nodes, you can add a field for lhs expression:
+    // (your current AST_ASSIGN only has a name string, you'll want to
+    // generalize it to accept an expression on the LHS, e.g. identifier or
+    // index)
+
+    assign->assign.lhs = lhs; // lhs could be identifier or index node
+    assign->assign.value = rhs;
+
+    *node = assign;
+    return 0;
+}
+
 static int parse_block(ast_node_t **node) {
     if (!match(TOKEN_LBRACE)) {
         error("expected `{` line %d, found `%s`", peek().line, peek().lexeme);
@@ -665,7 +895,7 @@ static int parse_block(ast_node_t **node) {
             }
             break;
         case TOKEN_IDENTIFIER: {
-            int ret = parse_assign(&stmt);
+            int ret = parse_assignable(&stmt);
             if (ret < 0) {
                 return -1;
             } else if (ret > 0) {
@@ -748,16 +978,8 @@ static int parse_fn(ast_node_t **node) {
                 return -1;
             }
 
-            token_t param_type_tok = peek();
-            if (!match(TOKEN_IDENTIFIER)) {
-                error("expected parameter type at line %d, found `%s`",
-                      peek().line, peek().lexeme);
-                free(params);
-                return -1;
-            }
-
             type_t param_type;
-            if (parse_type(param_type_tok.lexeme, &param_type) != 0) {
+            if (parse_type(&param_type) != 0) {
                 free(params);
                 return -1;
             }
@@ -805,14 +1027,8 @@ static int parse_fn(ast_node_t **node) {
               peek().lexeme);
         return -1;
     }
-    token_t ret = peek();
-    if (!match(TOKEN_IDENTIFIER)) {
-        error("expected return type at line %d, found `%s`", peek().line,
-              peek().lexeme);
-        return -1;
-    }
     type_t ret_type;
-    if (parse_type(ret.lexeme, &ret_type) != 0) {
+    if (parse_type(&ret_type) != 0) {
         return -1;
     }
 
@@ -953,7 +1169,7 @@ void free_ast_node(ast_node_t *node) {
         break;
 
     case AST_ASSIGN:
-        free(node->assign.name);
+        free_ast_node(node->assign.lhs);
         free_ast_node(node->assign.value);
         break;
 
@@ -972,6 +1188,11 @@ void free_ast_node(ast_node_t *node) {
         }
         free(node->call.args);
         free(node->call.name);
+        break;
+
+    case AST_INDEX:
+        free_ast_node(node->index.array);
+        free_ast_node(node->index.index);
         break;
 
     case AST_FUNCTION:

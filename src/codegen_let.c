@@ -31,8 +31,8 @@ int codegen_let(ast_node_t *node, LLVMBuilderRef builder, LLVMModuleRef module,
 
     LLVMValueRef init_val = NULL;
     if (node->let.value) {
-        if (codegen_expression(node->let.value, builder, module, context,
-                               symtab, &init_val) != 0) {
+        if (codegen_expr(node->let.value, builder, module, context, symtab,
+                         &init_val) != 0) {
             return -1;
         }
     } else {

@@ -69,6 +69,8 @@ static inline const char *token_type_to_str(token_type_t type) {
         return "TOKEN_COLON";
     case TOKEN_SEMICOLON:
         return "TOKEN_SEMICOLON";
+    case TOKEN_COMMA:
+        return "TOKEN_COMMA";
     case TOKEN_EQUAL:
         return "TOKEN_EQUAL";
     case TOKEN_EQUALEQUAL:

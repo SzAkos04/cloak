@@ -1,12 +1,65 @@
 #include "ast.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 // Helper to print indentation
 static void print_indent(int indent) {
     for (int i = 0; i < indent; ++i) {
         printf("  ");
+    }
+}
+
+char *primary_type_to_str(primary_type_t kind) {
+    switch (kind) {
+    case TYPE_BOOL:
+        return "bool";
+    case TYPE_F32:
+        return "f32";
+    case TYPE_F64:
+        return "f64";
+    case TYPE_I8:
+        return "i8";
+    case TYPE_I16:
+        return "i16";
+    case TYPE_I32:
+        return "i32";
+    case TYPE_I64:
+        return "i64";
+    case TYPE_STRING:
+        return "string";
+    case TYPE_VOID:
+        return "void";
+    default:
+        return "unknown primary type";
+    }
+}
+
+type_t type_void(void) {
+    return (type_t){
+        .kind = TYPE_PRIMARY,
+        .data.primary = TYPE_VOID,
+    };
+}
+
+void free_type(type_t t) {
+    if (t.kind == TYPE_ARRAY) {
+        free(t.data.array.type);
+    }
+}
+
+char *type_to_str(type_t *type) {
+    if (!type) {
+        return "NULL";
+    }
+    if (type->kind == TYPE_PRIMARY) {
+        return primary_type_to_str(type->data.primary);
+    } else {
+        char msg[64];
+        snprintf(msg, sizeof(msg), "arr<%s, %d>",
+                 type_to_str(type->data.array.type), type->data.array.length);
+        return strdup(msg);
     }
 }
 
@@ -141,11 +194,21 @@ static void debug_ast_node(ast_node_t *node, int indent) {
         break;
 
     case AST_ASSIGN:
-        printf("AST_ASSIGN: %s =\n", node->assign.name);
-        if (node->assign.value) {
-            debug_ast_node(node->assign.value, indent + 1);
+        printf("AST_ASSIGN:\n");
+        print_indent(indent + 1);
+        printf("LHS:\n");
+        if (node->assign.lhs) {
+            debug_ast_node(node->assign.lhs, indent + 2);
         } else {
-            print_indent(indent + 1);
+            print_indent(indent + 2);
+            printf("(no lhs)\n");
+        }
+        print_indent(indent + 1);
+        printf("Value:\n");
+        if (node->assign.value) {
+            debug_ast_node(node->assign.value, indent + 2);
+        } else {
+            print_indent(indent + 2);
             printf("(no value)\n");
         }
         break;
@@ -171,9 +234,21 @@ static void debug_ast_node(ast_node_t *node, int indent) {
         }
         break;
 
+    case AST_INDEX:
+        printf("AST_INDEX:\n");
+
+        print_indent(indent + 1);
+        printf("Array:\n");
+        debug_ast_node(node->index.array, indent + 2);
+
+        print_indent(indent + 1);
+        printf("Index:\n");
+        debug_ast_node(node->index.index, indent + 2);
+        break;
+
     case AST_FUNCTION:
         printf("AST_FUNCTION: %s, params=%d, return_type=%s\n", node->func.name,
-               node->func.param_count, type_to_str(node->func.ret_type));
+               node->func.param_count, type_to_str(&node->func.ret_type));
 
         if (node->func.param_count > 0) {
             print_indent(indent);
@@ -181,7 +256,7 @@ static void debug_ast_node(ast_node_t *node, int indent) {
             for (int i = 0; i < node->func.param_count; ++i) {
                 print_indent(indent + 1);
                 printf("%s: %s\n", node->func.params[i].name,
-                       type_to_str(node->func.params[i].type));
+                       type_to_str(&node->func.params[i].type));
             }
         }
 
@@ -209,7 +284,7 @@ static void debug_ast_node(ast_node_t *node, int indent) {
     case AST_LET:
         printf("AST_LET: name=%s, mutable=%s, type=%s\n", node->let.name,
                node->let.is_mutable ? "true" : "false",
-               type_to_str(node->let.type));
+               type_to_str(&node->let.type));
 
         if (node->let.value) {
             print_indent(indent + 1);

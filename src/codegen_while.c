@@ -30,8 +30,8 @@ int codegen_while(ast_node_t *node, LLVMBuilderRef builder,
     LLVMPositionBuilderAtEnd(builder, cond_bb);
 
     LLVMValueRef cond = NULL;
-    if (codegen_expression(node->while_stmt.condition, builder, module, context,
-                           symtab, &cond) != 0) {
+    if (codegen_expr(node->while_stmt.condition, builder, module, context,
+                     symtab, &cond) != 0) {
         return -1;
     }
 

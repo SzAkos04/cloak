@@ -102,7 +102,8 @@ int codegen_fn(ast_node_t *node, LLVMModuleRef module, LLVMContextRef context,
     LLVMTypeRef ret_type = get_llvm_type(node->func.ret_type, context);
 
     if (!LLVMGetBasicBlockTerminator(LLVMGetInsertBlock(builder))) {
-        if (node->func.ret_type == TYPE_VOID) {
+        if (node->func.ret_type.kind == TYPE_PRIMARY &&
+            node->func.ret_type.data.primary == TYPE_VOID) {
             LLVMBuildRetVoid(builder);
         } else if (ret_val) {
             LLVMBuildRet(builder, ret_val);
