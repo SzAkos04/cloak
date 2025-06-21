@@ -74,5 +74,7 @@ int main(int argc, char **argv) {
     free_tokens(tokens, token_count);
     free_ast(ast);
 
+    success("hehehe");
+
     return EXIT_SUCCESS;
 }

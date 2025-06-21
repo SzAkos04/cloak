@@ -19,10 +19,11 @@ int codegen_assign(ast_node_t *node, LLVMBuilderRef builder,
     // generate pointer to assign to from lhs expression:
     LLVMValueRef ptr = NULL;
 
+    symbol_t *sym;
+    LLVMTypeRef expected_type = NULL;
     switch (node->assign.lhs->type) {
     case AST_IDENTIFIER: {
-        symbol_t *sym =
-            symbol_table_lookup(symtab, node->assign.lhs->identifier.name);
+        sym = symbol_table_lookup(symtab, node->assign.lhs->identifier.name);
         if (!sym) {
             error("undefined variable `%s`", node->assign.lhs->identifier.name);
             return -1;
@@ -34,14 +35,38 @@ int codegen_assign(ast_node_t *node, LLVMBuilderRef builder,
         ptr = sym->value; // pointer to variable's storage
         break;
     }
-    case AST_INDEX: { // BUG: SIGSEGV here
-
-        // You need to implement codegen for indexed lvalue,
-        // something like codegen_index_lvalue() that returns pointer
-        if (codegen_expr(node->assign.lhs, builder, module, context, symtab,
-                         &ptr) != 0) {
+    case AST_INDEX: {
+        ast_node_t *array_expr = node->assign.lhs->index.array;
+        if (array_expr->type != AST_IDENTIFIER) {
+            error("complex indexing expressions not yet supported");
             return -1;
         }
+
+        sym = symbol_table_lookup(symtab, array_expr->identifier.name);
+        if (!sym) {
+            error("undefined variable `%s`", array_expr->identifier.name);
+            return -1;
+        }
+        if (!sym->is_mutable) {
+            error("cannot mutate immutable variable `%s`", sym->name);
+            return -1;
+        }
+        LLVMValueRef arr_ptr = sym->value;
+
+        LLVMValueRef index_val;
+        if (codegen_expr(node->assign.lhs->index.index, builder, module,
+                         context, symtab, &index_val) != 0) {
+            return -1;
+        }
+
+        LLVMTypeRef sym_type = sym->type;                        // [N x T]
+        LLVMTypeRef indexed_type = LLVMGetElementType(sym_type); // T
+
+        LLVMValueRef indices[2] = {
+            LLVMConstInt(LLVMInt32TypeInContext(context), 0, false), index_val};
+        ptr = LLVMBuildGEP2(builder, sym_type, arr_ptr, indices, 2, "elemptr");
+
+        expected_type = indexed_type;
         break;
     }
     default:
@@ -55,10 +80,13 @@ int codegen_assign(ast_node_t *node, LLVMBuilderRef builder,
         return -1;
     }
 
-    LLVMTypeRef expected_type = LLVMTypeOf(ptr);
+    if (!expected_type) {
+        expected_type = sym->type;
+    }
     LLVMTypeRef val_type = LLVMTypeOf(val);
 
     if (val_type != expected_type) {
+        LLVMDumpModule(module);
         char *expected_str = LLVMPrintTypeToString(expected_type);
         char *actual_str = LLVMPrintTypeToString(val_type);
         error("type mismatch in assignment: expected `%s`, got `%s`",
