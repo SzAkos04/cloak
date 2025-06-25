@@ -102,10 +102,19 @@ static int number(token_t *token) {
     while (isdigit(peek())) {
         advance();
     }
+
+    if (peek() == '.' && isdigit(lexer.current[1])) {
+        advance(); // consume `.`
+
+        // consume fractional part digits
+        while (isdigit(peek())) {
+            advance();
+        }
+    }
+
     return make_token(TOKEN_NUMBER, token);
 }
 
-// TODO: support escape codes
 static int string(token_t *token) {
     while (!is_at_end() && peek() != '"') {
         if (peek() == '\n') {

@@ -1,6 +1,7 @@
 #include "codegen_utils.h"
 
 #include "ast.h"
+#include "codegen_const_expr.h"
 #include "debug.h"
 
 #include <llvm-c/Core.h>
@@ -33,18 +34,27 @@ LLVMTypeRef get_llvm_primary_type(primary_type_t type, LLVMContextRef context) {
 }
 
 LLVMTypeRef get_llvm_type(type_t type, LLVMContextRef context) {
-    if (type.kind == TYPE_PRIMARY) {
+    switch (type.kind) {
+    case TYPE_PRIMARY:
         return get_llvm_primary_type(type.data.primary, context);
-    } else {
+    case TYPE_ARRAY: {
         LLVMTypeRef element_type =
             get_llvm_type(*type.data.array.type, context);
-        if (type.data.array.length > 0) {
+        int len = 0;
+        if (evaluate_constant_expr(type.data.array.len, &len) != 0) {
+            return NULL;
+        }
+        if (len > 0) {
             // Fixed-size array
-            return LLVMArrayType(element_type,
-                                 (unsigned)type.data.array.length);
+            return LLVMArrayType(element_type, (unsigned)len);
         } else {
             // Dynamic array as pointer to element
-            return LLVMPointerType(element_type, 0);
+            error("array length must be greater than 0");
+            return NULL;
         }
+    }
+    default:
+        error("unknown type");
+        return NULL;
     }
 }

@@ -45,6 +45,7 @@ type_t type_void(void) {
 
 void free_type(type_t t) {
     if (t.kind == TYPE_ARRAY) {
+        free_type(*t.data.array.type);
         free(t.data.array.type);
     }
 }
@@ -57,8 +58,8 @@ char *type_to_str(type_t *type) {
         return primary_type_to_str(type->data.primary);
     } else {
         char msg[64];
-        snprintf(msg, sizeof(msg), "arr<%s, %d>",
-                 type_to_str(type->data.array.type), type->data.array.length);
+        snprintf(msg, sizeof(msg), "arr<%s, ...>",
+                 type_to_str(type->data.array.type));
         return strdup(msg);
     }
 }

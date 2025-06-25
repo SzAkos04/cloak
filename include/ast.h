@@ -3,6 +3,28 @@
 #include <stdbool.h>
 
 typedef enum {
+    AST_PROGRAM,
+
+    AST_IDENTIFIER,
+    AST_LITERAL,
+    AST_BLOCK,
+    AST_ASSIGN,
+    AST_UNARY,
+    AST_BINARY,
+
+    AST_CALL,  // for function calls
+    AST_INDEX, // for array access
+
+    AST_FUNCTION,
+    AST_IF,
+    AST_LET,
+    AST_RETURN,
+    AST_WHILE,
+} ast_node_type_t;
+
+struct ast_node;
+
+typedef enum {
     TYPE_BOOL,
     TYPE_F32,
     TYPE_F64,
@@ -28,7 +50,7 @@ typedef struct type_t {
 
         struct {
             struct type_t *type;
-            int length;
+            struct ast_node *len;
         } array;
     } data;
 } type_t;
@@ -74,28 +96,6 @@ typedef enum {
 } binary_op_t;
 int str_to_binary_op(const char *str, binary_op_t *op);
 const char *binary_op_to_str(binary_op_t op);
-
-typedef enum {
-    AST_PROGRAM,
-
-    AST_IDENTIFIER,
-    AST_LITERAL,
-    AST_BLOCK,
-    AST_ASSIGN,
-    AST_UNARY,
-    AST_BINARY,
-
-    AST_CALL,  // for function calls
-    AST_INDEX, // for array access
-
-    AST_FUNCTION,
-    AST_IF,
-    AST_LET,
-    AST_RETURN,
-    AST_WHILE,
-} ast_node_type_t;
-
-struct ast_node;
 
 typedef struct {
     struct ast_node **decls;

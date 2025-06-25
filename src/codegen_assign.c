@@ -64,7 +64,8 @@ int codegen_assign(ast_node_t *node, LLVMBuilderRef builder,
 
         LLVMValueRef indices[2] = {
             LLVMConstInt(LLVMInt32TypeInContext(context), 0, false), index_val};
-        ptr = LLVMBuildGEP2(builder, sym_type, arr_ptr, indices, 2, "elemptr");
+        ptr = LLVMBuildInBoundsGEP2(builder, sym_type, arr_ptr, indices, 2,
+                                    "elemptr");
 
         expected_type = indexed_type;
         break;
