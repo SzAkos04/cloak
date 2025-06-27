@@ -33,6 +33,8 @@ class Lexer {
     size_t cur;
     int line;
 
+    bool verbose;
+
     bool isAtEnd() const;
     char peek() const;
     char peekNext() const;

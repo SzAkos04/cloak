@@ -4,7 +4,7 @@ CFLAGS := -Wall -Wextra -Werror -Wpedantic
 LDFLAGS ?=
 INCLUDES := -Iinclude
 SRC_DIR := src
-SRC := $(wildcard $(SRC_DIR)/*.cpp)
+SRC := $(shell find $(SRC_DIR) -name '*.cpp')
 ifeq ($(SRC),)
 $(error No source files found in $(SRC_DIR))
 endif

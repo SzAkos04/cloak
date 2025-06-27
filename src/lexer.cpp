@@ -16,20 +16,16 @@ std::string LexerError::formatMessage(int line, const std::string &msg,
                                       const char *func) {
     std::ostringstream oss;
     if (!verbose || file == nullptr || func == nullptr || line == 0) {
-        oss << "Line " << std::to_string(line_) << ": " << msg;
+        oss << "Line " << std::to_string(line) << ": " << msg;
     } else {
-        oss << file << ":" << line << " (" << func << "): " << "Line "
-            << std::to_string(line_) << ": " << msg;
+        oss << file << ":" << line_ << " (" << func << "): " << "Line "
+            << std::to_string(line) << ": " << msg;
     }
     return oss.str();
 }
 
-bool verbose;
-
 Lexer::Lexer(const std::string &src, bool verb)
-    : src(src), start(0), cur(0), line(1) {
-    verbose = verb;
-}
+    : src(src), start(0), cur(0), line(1), verbose(verb) {}
 
 std::vector<Token> Lexer::lex() {
     std::vector<Token> tokens;
@@ -116,14 +112,16 @@ std::vector<Token> Lexer::lex() {
             if (this->match('&')) {
                 tokens.push_back(this->makeToken(TokenType::AND));
             } else {
-                THROW_LEXER(this->line, "Unexpected character '&'", verbose);
+                THROW_LEXER(this->line, "Unexpected character '&'",
+                            this->verbose);
             }
             break;
         case '|':
             if (this->match('|')) {
                 tokens.push_back(this->makeToken(TokenType::OR));
             } else {
-                THROW_LEXER(this->line, "Unexpected character '|'", verbose);
+                THROW_LEXER(this->line, "Unexpected character '|'",
+                            this->verbose);
             }
             break;
         case '"':
@@ -140,7 +138,7 @@ std::vector<Token> Lexer::lex() {
             } else {
                 THROW_LEXER(this->line,
                             std::string("Unexpected character '") + c + "'",
-                            verbose);
+                            this->verbose);
             }
             break;
         }
@@ -211,7 +209,7 @@ Token Lexer::string() {
     }
 
     if (this->isAtEnd()) {
-        THROW_LEXER(this->line, "Unterminated string.", verbose);
+        THROW_LEXER(this->line, "Unterminated string.", this->verbose);
     }
 
     this->advance(); // consume `"`

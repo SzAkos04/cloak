@@ -1,9 +1,13 @@
+#include "ast.hpp"
 #include "cli.hpp"
 #include "debug.hpp"
 #include "filereader.hpp"
 #include "lexer.hpp"
+#include "parser.hpp"
 #include "token.hpp"
+#include "visitors/print_visitor.hpp"
 
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -34,6 +38,12 @@ int main(int argc, char **argv) {
         }
 #endif
 
+        Parser parser(tokens, opts.verbose);
+        std::unique_ptr<AstProgram> ast = parser.parseProgram();
+
+        AstPrintVisitor printer;
+        ast->accept(printer);
+
         return 0;
     } catch (const CLIError &e) {
         error(std::string("[CLI] ") + e.what());
@@ -44,8 +54,11 @@ int main(int argc, char **argv) {
     } catch (const LexerError &e) {
         error(std::string("[LEXER] ") + e.what());
         return -1;
+    } catch (const ParserError &e) {
+        error(std::string("[PARSER] ") + e.what());
+        return -1;
     } catch (const std::exception &e) {
-        error(std::string("[UNKNOWN] ") + e.what());
+        error(e.what());
         return -1;
     }
 }

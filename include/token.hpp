@@ -53,6 +53,11 @@ class Token {
     Token(TokenType type, const std::string &lexeme, int len, int line);
     friend std::ostream &operator<<(std::ostream &os, const Token &tok);
 
+    TokenType getType() const { return this->type; }
+    const std::string &getLexeme() const { return this->lexeme; }
+    int getLine() const { return this->line; }
+    int getLength() const { return this->len; }
+
   private:
     TokenType type;
     std::string lexeme;
