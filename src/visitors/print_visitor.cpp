@@ -3,17 +3,17 @@
 #include <iostream>
 
 void AstPrintVisitor::indent() {
-    for (int i = 0; i < indent_level; ++i)
+    for (int i = 0; i < this->indent_level; ++i)
         std::cout << "  ";
 }
 
 void AstPrintVisitor::visit(AstProgram &node) {
     std::cout << "Program:\n";
-    indent_level++;
+    this->indent_level++;
     for (auto &decl : node.decls) {
         decl->accept(*this);
     }
-    indent_level--;
+    this->indent_level--;
 }
 
 void AstPrintVisitor::visit(AstIdentifier &node) {
@@ -28,9 +28,11 @@ void AstPrintVisitor::visit(AstLiteral &node) {
         std::cout << node.value.getNumber() << " ("
                   << primary_type_to_str(node.value.getNumType()) << ")";
     } else if (node.value.isString()) {
-        std::cout << '"' << std::get<std::string>(node.value.value) << '"';
+        std::cout << "\"" << std::get<std::string>(node.value.value)
+                  << "\" (string)";
     } else if (node.value.isBool()) {
-        std::cout << (std::get<bool>(node.value.value) ? "true" : "false");
+        std::cout << (std::get<bool>(node.value.value) ? "true" : "false")
+                  << " (bool)";
     }
     std::cout << "\n";
 }
@@ -38,11 +40,11 @@ void AstPrintVisitor::visit(AstLiteral &node) {
 void AstPrintVisitor::visit(AstBlock &node) {
     indent();
     std::cout << "Block:\n";
-    indent_level++;
+    this->indent_level++;
     for (auto &stmt : node.stmts) {
         stmt->accept(*this);
     }
-    indent_level--;
+    this->indent_level--;
 }
 
 void AstPrintVisitor::visit(AstUnary &node) {
@@ -56,9 +58,9 @@ void AstPrintVisitor::visit(AstUnary &node) {
         std::cout << "!\n";
         break;
     }
-    indent_level++;
+    this->indent_level++;
     node.right->accept(*this);
-    indent_level--;
+    this->indent_level--;
 }
 
 void AstPrintVisitor::visit(AstBinary &node) {
@@ -106,10 +108,10 @@ void AstPrintVisitor::visit(AstBinary &node) {
         break;
     }
     std::cout << "\n";
-    indent_level++;
+    this->indent_level++;
     node.left->accept(*this);
     node.right->accept(*this);
-    indent_level--;
+    this->indent_level--;
 }
 
 void AstPrintVisitor::visit(AstFn &node) {
@@ -125,7 +127,20 @@ void AstPrintVisitor::visit(AstFn &node) {
     std::cout << ") -> " << primary_type_to_str(node.ret_type.data.primary)
               << "\n";
 
-    indent_level++;
+    this->indent_level++;
     node.body->accept(*this);
-    indent_level--;
+    this->indent_level--;
+}
+
+void AstPrintVisitor::visit(AstReturn &node) {
+    indent();
+    std::cout << "Return:\n";
+    this->indent_level++;
+    if (node.expr) {
+        node.expr->accept(*this);
+    } else {
+        indent();
+        std::cout << "(void)\n";
+    }
+    this->indent_level--;
 }

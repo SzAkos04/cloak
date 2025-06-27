@@ -9,6 +9,7 @@ void AstBlock::accept(AstVisitor &visitor) { visitor.visit(*this); }
 void AstUnary::accept(AstVisitor &visitor) { visitor.visit(*this); }
 void AstBinary::accept(AstVisitor &visitor) { visitor.visit(*this); }
 void AstFn::accept(AstVisitor &visitor) { visitor.visit(*this); }
+void AstReturn::accept(AstVisitor &visitor) { visitor.visit(*this); }
 
 // Type move and destructor definitions (simplified)
 

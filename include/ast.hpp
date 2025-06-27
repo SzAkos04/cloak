@@ -219,8 +219,7 @@ struct AstProgram : AstNode {
     std::vector<AstNodePtr> decls;
 
     AstProgram() = default;
-    explicit AstProgram(std::vector<AstNodePtr> decls_)
-        : decls(std::move(decls_)) {}
+    explicit AstProgram(std::vector<AstNodePtr> d) : decls(std::move(d)) {}
 
     void accept(AstVisitor &visitor) override;
 };
@@ -235,14 +234,14 @@ struct AstIdentifier : AstNode {
 struct AstLiteral : AstNode {
     Literal value;
 
-    explicit AstLiteral(Literal val) : value(std::move(val)) {}
+    explicit AstLiteral(Literal v) : value(std::move(v)) {}
     void accept(AstVisitor &visitor) override;
 };
 
 struct AstBlock : AstNode {
     std::vector<AstNodePtr> stmts;
 
-    AstBlock(std::vector<AstNodePtr> stmts_) : stmts(std::move(stmts_)) {}
+    AstBlock(std::vector<AstNodePtr> s) : stmts(std::move(s)) {}
     void accept(AstVisitor &visitor) override;
 };
 
@@ -268,8 +267,7 @@ struct Param {
     std::string name;
     Type type;
 
-    Param(std::string name_, Type type_)
-        : name(std::move(name_)), type(std::move(type_)) {}
+    Param(std::string n, Type t) : name(std::move(n)), type(std::move(t)) {}
 
     Param(Param &&) noexcept = default;
     Param &operator=(Param &&) noexcept = default;
@@ -284,6 +282,13 @@ struct AstFn : AstNode {
     AstFn(std::string n, std::vector<Param> p, Type rt, AstNodePtr b)
         : name(std::move(n)), params(std::move(p)), ret_type(std::move(rt)),
           body(std::move(b)) {}
+    void accept(AstVisitor &visitor) override;
+};
+
+struct AstReturn : AstNode {
+    AstNodePtr expr;
+
+    AstReturn(AstNodePtr e) : expr(std::move(e)) {}
     void accept(AstVisitor &visitor) override;
 };
 
@@ -303,4 +308,5 @@ struct AstVisitor {
     virtual void visit(AstBinary &node) = 0;
 
     virtual void visit(AstFn &node) = 0;
+    virtual void visit(AstReturn &node) = 0;
 };

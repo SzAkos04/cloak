@@ -39,7 +39,8 @@ enum class TokenType {
 
     IDENTIFIER,
 
-    FN,
+    FN,     // `fn`
+    RETURN, // `return`
 
     NUMBER,
     STRING,

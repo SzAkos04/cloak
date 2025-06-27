@@ -2,6 +2,7 @@
 #include "parser.hpp"
 #include "token.hpp"
 
+#include <cmath>
 #include <memory>
 #include <sstream>
 #include <string>
@@ -26,8 +27,6 @@ std::string ParserError::formatMessage(int line, const std::string &msg,
     return oss.str();
 }
 
-bool verbose;
-
 Parser::Parser(const std::vector<Token> &tokens, bool verb)
     : tokens(tokens), current(0), verbose(verb) {}
 
@@ -45,10 +44,6 @@ bool Parser::isAtEnd() const {
 }
 
 const Token &Parser::peek() const { return this->tokens.at(this->current); }
-
-const Token &Parser::previous() const {
-    return this->tokens.at(this->current - 1);
-}
 
 const Token &Parser::advance() { return this->tokens.at(this->current++); }
 
@@ -70,7 +65,7 @@ bool Parser::match(TokenType type) {
 
 AstNodePtr Parser::parseDecl() {
     if (this->check(TokenType::FN)) {
-        return parseFn();
+        return this->parseFn();
     }
 
     THROW_PARSER(this->peek().getLine(), "Expected declaration", this->verbose);
@@ -80,6 +75,8 @@ AstNodePtr Parser::parseDecl() {
 AstNodePtr Parser::parseStmt() {
     Token tok = this->peek();
     switch (tok.getType()) {
+    case TokenType::RETURN:
+        return this->parseReturn();
     default:
         THROW_PARSER(this->peek().getLine(),
                      "`" + this->peek().getLexeme() + "` not yet implemented",
@@ -89,7 +86,7 @@ AstNodePtr Parser::parseStmt() {
 
 Type Parser::parseType() {
     std::string lexeme = this->peek().getLexeme();
-    if (check(TokenType::IDENTIFIER)) {
+    if (this->check(TokenType::IDENTIFIER)) {
         // parse array type
         if (lexeme == "arr") {
             return this->parseArr();
@@ -161,7 +158,7 @@ Type Parser::parseArr() {
     }
     // `<` is consumed
 
-    Type element_type = parseType();
+    Type element_type = this->parseType();
     std::unique_ptr<Type> element_type_ptr =
         std::make_unique<Type>(std::move(element_type));
 
@@ -186,14 +183,14 @@ Type Parser::parseArr() {
 }
 
 AstNodePtr Parser::parseExpr() {
-    auto lhs = parseUnaryExpr();
+    auto lhs = this->parseUnaryExpr();
     if (!lhs) {
         THROW_PARSER(this->peek().getLine(),
                      "Expected expression, found `" + this->peek().getLexeme() +
                          "`",
                      this->verbose);
     }
-    return parseBinaryRhs(0, std::move(lhs));
+    return this->parseBinaryRhs(0, std::move(lhs));
 }
 
 AstNodePtr Parser::parsePrimary() {
@@ -218,13 +215,8 @@ AstNodePtr Parser::parsePrimary() {
     }
 
     case TokenType::IDENTIFIER: {
-        if (tok.getLexeme() == "true" || tok.getLexeme() == "false") {
-            this->advance();
-            return std::make_unique<AstLiteral>(tok.getLexeme() == "true");
-        } else {
-            this->advance();
-            return std::make_unique<AstIdentifier>(tok.getLexeme());
-        }
+        this->advance();
+        return std::make_unique<AstIdentifier>(tok.getLexeme());
     }
 
     case TokenType::NUMBER: {
@@ -232,10 +224,13 @@ AstNodePtr Parser::parsePrimary() {
         // convert to double
         try {
             double val = std::stod(tok.getLexeme());
-            return std::make_unique<AstLiteral>(val);
+            PrimaryType type =
+                std::floor(val) == val ? PrimaryType::I32 : PrimaryType::F64;
+            return std::make_unique<AstLiteral>(Literal(val, type));
         } catch (...) {
             THROW_PARSER(tok.getLine(),
-                         "Invalid number literal: " + tok.getLexeme(), verbose);
+                         "Invalid number literal: " + tok.getLexeme(),
+                         this->verbose);
         }
     }
 
@@ -244,61 +239,65 @@ AstNodePtr Parser::parsePrimary() {
         return std::make_unique<AstLiteral>(tok.getLexeme());
     }
 
+    case TokenType::BOOL: {
+        this->advance();
+        return std::make_unique<AstLiteral>(tok.getLexeme() == "true");
+    }
+
     default:
         THROW_PARSER(tok.getLine(),
                      "Unexpected token `" + tok.getLexeme() +
                          "` while parsing primary expression",
-                     verbose);
+                     this->verbose);
     }
 }
 
 AstNodePtr Parser::parseUnaryExpr() {
-    const Token &tok = peek();
+    const Token &tok = this->peek();
     if (tok.getType() == TokenType::BANG || tok.getType() == TokenType::MINUS) {
         UnaryOp op = tokenTypeToUnaryOp(tok.getType());
-        advance(); // consume operator
-        auto operand = parseUnaryExpr();
+        this->advance(); // consume operator
+        auto operand = this->parseUnaryExpr();
         if (!operand) {
             return nullptr;
         }
         return std::make_unique<AstUnary>(op, std::move(operand));
     }
-    return parsePrimary();
+    return this->parsePrimary();
 }
 
 AstNodePtr Parser::parseBinaryRhs(int precedence, AstNodePtr lhs) {
     while (true) {
-        const Token &tok = peek();
+        const Token &tok = this->peek();
         if (!isBinaryOp(tok.getType())) {
             return lhs;
         }
 
-        int tokPrec = getPrecedence(tok.getType());
+        int tokPrec = this->getPrecedence(tok.getType());
 
-        // If the next operator has lower precedence, stop parsing binary rhs
+        // if the next operator has lower precedence, stop parsing binary rhs
         if (tokPrec < precedence) {
             return lhs;
         }
 
         BinaryOp op = tokenTypeToBinaryOp(tok.getType());
-        advance(); // consume operator
+        this->advance(); // consume operator
 
         // parse the right hand side expression with higher precedence
-        auto rhs = parseUnaryExpr();
+        auto rhs = this->parseUnaryExpr();
         if (!rhs) {
             return nullptr;
         }
 
-        const Token &nextTok = peek();
-        int nextPrec = getPrecedence(nextTok.getType());
+        const Token &nextTok = this->peek();
+        int nextPrec = this->getPrecedence(nextTok.getType());
         if (tokPrec < nextPrec) {
-            rhs = parseBinaryRhs(tokPrec + 1, std::move(rhs));
+            rhs = this->parseBinaryRhs(tokPrec + 1, std::move(rhs));
             if (!rhs) {
                 return nullptr;
             }
         }
 
-        // Create a binary expression node combining lhs and rhs
         lhs = std::make_unique<AstBinary>(std::move(lhs), op, std::move(rhs));
     }
 }
@@ -338,7 +337,7 @@ AstNodePtr Parser::parseBlock() {
     std::vector<AstNodePtr> stmts_;
 
     while (!this->match(TokenType::RBRACE) || !this->isAtEnd()) {
-        stmts_.push_back(parseStmt());
+        stmts_.push_back(this->parseStmt());
     } // `}` consumed
 
     return std::make_unique<AstBlock>(std::move(stmts_));
@@ -385,7 +384,7 @@ AstNodePtr Parser::parseFn() {
                              this->verbose);
             } // `:` consumed
 
-            Type param_type = parseType();
+            Type param_type = this->parseType();
 
             params.push_back(
                 Param(param_name_tok.getLexeme(), std::move(param_type)));
@@ -415,4 +414,27 @@ AstNodePtr Parser::parseFn() {
 
     return std::make_unique<AstFn>(name_tok.getLexeme(), std::move(params),
                                    std::move(ret_type), std::move(body));
+}
+
+AstNodePtr Parser::parseReturn() {
+    if (!this->match(TokenType::RETURN)) {
+        THROW_PARSER(this->peek().getLine(),
+                     "Expected `return` keyword, found `" +
+                         this->peek().getLexeme() + "`",
+                     this->verbose);
+    } // `return` consumed
+
+    if (this->match(TokenType::SEMICOLON)) {
+        return std::make_unique<AstReturn>(nullptr);
+    }
+
+    AstNodePtr expr = this->parseExpr();
+
+    if (!this->match(TokenType::SEMICOLON)) {
+        THROW_PARSER(this->peek().getLine(),
+                     "Expected `;`, found `" + this->peek().getLexeme() + "`",
+                     this->verbose);
+    }
+
+    return std::make_unique<AstReturn>(std::move(expr));
 }

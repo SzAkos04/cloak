@@ -14,4 +14,5 @@ struct AstPrintVisitor : AstVisitor {
     void visit(AstUnary &node) override;
     void visit(AstBinary &node) override;
     void visit(AstFn &node) override;
+    void visit(AstReturn &node) override;
 };

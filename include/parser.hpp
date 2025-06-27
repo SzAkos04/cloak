@@ -36,7 +36,6 @@ class Parser {
 
     bool isAtEnd() const;
     const Token &peek() const;
-    const Token &previous() const;
     const Token &advance();
     bool check(TokenType type) const;
     bool match(TokenType type);
@@ -59,4 +58,5 @@ class Parser {
     AstNodePtr parseBlock();
 
     AstNodePtr parseFn();
+    AstNodePtr parseReturn();
 };

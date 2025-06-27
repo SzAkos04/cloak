@@ -71,6 +71,8 @@ std::string tokenTypeToString(TokenType type) {
         return "IDENTIFIER";
     case TokenType::FN:
         return "FN";
+    case TokenType::RETURN:
+        return "RETURN";
     case TokenType::NUMBER:
         return "NUMBER";
     case TokenType::STRING:

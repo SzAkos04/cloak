@@ -39,10 +39,10 @@ int main(int argc, char **argv) {
 #endif
 
         Parser parser(tokens, opts.verbose);
-        std::unique_ptr<AstProgram> ast = parser.parseProgram();
+        std::unique_ptr<AstProgram> root = parser.parseProgram();
 
         AstPrintVisitor printer;
-        ast->accept(printer);
+        root->accept(printer);
 
         return 0;
     } catch (const CLIError &e) {

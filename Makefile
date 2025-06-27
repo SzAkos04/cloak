@@ -1,7 +1,7 @@
 CXX := g++
 PROJECT := cloak
-CFLAGS := -Wall -Wextra -Werror -Wpedantic
-LDFLAGS ?=
+CFLAGS := -Wall -Wextra -Werror -Wpedantic `llvm-config --cxxflags` -fexceptions
+LDFLAGS ?= `llvm-config --ldflags --system-libs --libs core`
 INCLUDES := -Iinclude
 SRC_DIR := src
 SRC := $(shell find $(SRC_DIR) -name '*.cpp')
@@ -22,7 +22,7 @@ CYAN := $(shell printf '[0;36m')
 RESET := $(shell printf '[0m')
 ECHO = @echo
 
-.PHONY: all build release clean
+.PHONY: all build release clean help
 
 all: build
 

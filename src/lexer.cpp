@@ -246,6 +246,7 @@ Token Lexer::identifier() {
 
     static const std::unordered_map<std::string, TokenType> keywords = {
         {"fn", TokenType::FN},
+        {"return", TokenType::RETURN},
     };
 
     auto it = keywords.find(text);

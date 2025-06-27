@@ -44,10 +44,10 @@ void FileReader::readContent() {
         THROW_FILEREADER(this->filename, "Failed to get file size",
                          this->verbose);
     }
-    file.seekg(0, std::ios::beg);
+    this->file.seekg(0, std::ios::beg);
 
-    content.resize(static_cast<size_t>(size));
-    if (!file.read(content.data(), size)) {
+    this->content.resize(static_cast<size_t>(size));
+    if (!this->file.read(this->content.data(), size)) {
         THROW_FILEREADER(this->filename, "Error reading file content",
                          this->verbose);
     }
