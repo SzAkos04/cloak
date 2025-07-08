@@ -1,6 +1,6 @@
 CXX := g++
 PROJECT := cloak
-CFLAGS := -Wall -Wextra -Werror -Wpedantic
+CFLAGS := -Wall -Wextra -Werror -Wpedantic -DFMT_HEADER_ONLY
 LDFLAGS ?=
 INCLUDES := -Iinclude
 SRC_DIR := src
@@ -22,9 +22,9 @@ CYAN := $(shell printf '[0;36m')
 RESET := $(shell printf '[0m')
 ECHO = @echo
 
-.PHONY: all build release run clean
+.PHONY: all build release clean
 
-all: run
+all: build
 
 build: $(BUILD_DIR)/$(PROJECT)
 
@@ -41,9 +41,6 @@ $(BUILD_DIR)/$(PROJECT): $(OBJ)
 release:
 	$(ECHO) "$(CYAN)[RELEASE]$(RESET) Building release version..."
 	@$(MAKE) -B build BUILD_ARGS=-O3
-
-run: build
-	@./$(BUILD_DIR)/$(PROJECT) $(ARGS)
 
 clean:
 	$(ECHO) "$(CYAN)[CLEAN]$(RESET) Removing build directory..."
