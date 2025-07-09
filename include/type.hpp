@@ -66,11 +66,11 @@ struct Type {
         PrimaryType primary;
 
         struct ArrayData {
-            std::unique_ptr<Type> element_type;
+            std::unique_ptr<Type> elementType;
             AstNodePtr length;
 
             ArrayData(std::unique_ptr<Type> elem, AstNodePtr len)
-                : element_type(std::move(elem)), length(std::move(len)) {}
+                : elementType(std::move(elem)), length(std::move(len)) {}
 
             ArrayData(ArrayData &&other) noexcept = default;
             ArrayData &operator=(ArrayData &&other) noexcept = default;
@@ -117,7 +117,7 @@ struct Type {
             return primaryTypeToString(data.primary);
         } else if (kind == Kind::Array) {
             return fmt::format("arr<{}, _>",
-                               data.array.element_type->toString());
+                               data.array.elementType->toString());
         } else {
             return "UnknownType";
         }

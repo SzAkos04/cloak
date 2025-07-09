@@ -1,6 +1,6 @@
 CXX := g++
 PROJECT := cloak
-CFLAGS := -Wall -Wextra -Werror -Wpedantic -DFMT_HEADER_ONLY
+CXXFLAGS := -Wall -Wextra -Werror -Wpedantic -DFMT_HEADER_ONLY
 LDFLAGS ?=
 INCLUDES := -Iinclude
 SRC_DIR := src
@@ -17,6 +17,15 @@ BUILD_DIR := build
 BUILD_ARGS ?= -DDEBUG
 OBJ := $(SRC:$(SRC_DIR)/%.cpp=$(BUILD_DIR)/%.o)
 
+LLVM_CONFIG := llvm-config
+ifndef LLVM_CONFIG
+$(error llvm-config not found)
+endif
+LLVM_CXXFLAGS := $(shell $(LLVM_CONFIG) --cxxflags)
+LLVM_LDFLAGS := $(shell $(LLVM_CONFIG) --ldflags --libs core orcjit native)
+CXXFLAGS += $(LLVM_CXXFLAGS) -fexceptions
+LDFLAGS += $(LLVM_LDFLAGS)
+
 GREEN := $(shell printf '[0;32m')
 CYAN := $(shell printf '[0;36m')
 RESET := $(shell printf '[0m')
@@ -31,11 +40,11 @@ build: $(BUILD_DIR)/$(PROJECT)
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.cpp
 	@mkdir -p $(@D)
 	$(ECHO) "$(CYAN)[BUILD]$(RESET) Compiling $<..."
-	@$(CXX) $(CFLAGS) -MMD -MP -c "$<" -o "$@" $(INCLUDES) $(BUILD_ARGS)
+	@$(CXX) $(CXXFLAGS) -MMD -MP -c "$<" -o "$@" $(INCLUDES) $(BUILD_ARGS)
 
 $(BUILD_DIR)/$(PROJECT): $(OBJ)
 	$(ECHO) "$(CYAN)[LINK]$(RESET) Creating binary at $@"
-	@$(CXX) $(CFLAGS) $^ -o $@ $(INCLUDES) $(LDFLAGS) $(BUILD_ARGS)
+	@$(CXX) $(CXXFLAGS) $^ -o $@ $(INCLUDES) $(LDFLAGS) $(BUILD_ARGS)
 	$(ECHO) "$(GREEN)[OK]$(RESET) Build complete: $@"
 
 release:
