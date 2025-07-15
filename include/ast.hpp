@@ -117,7 +117,7 @@ struct AstNode {
     virtual void accept(AstVisitor &visitor) = 0;
     virtual AstNodeKind kind() const;
 
-    PrimaryType inferredType = PrimaryType::Void;
+    const Type *inferredType = nullptr;
 };
 
 // AST node subclasses

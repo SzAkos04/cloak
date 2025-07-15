@@ -24,10 +24,10 @@ class CodegenError : public Error {
 
 class CodegenVisitor : public AstVisitor {
   public:
-    explicit CodegenVisitor(bool verbose_)
+    explicit CodegenVisitor(const std::string &filename_, bool verbose_)
         : context(std::make_unique<llvm::LLVMContext>()),
           module(std::make_unique<llvm::Module>("main_module", *context)),
-          builder(*context), verbose(verbose_) {}
+          builder(*context), filename(filename_), verbose(verbose_) {}
 
     void visit(AstProgram &node) override;
     void visit(AstIdentifier &node) override;
@@ -51,6 +51,9 @@ class CodegenVisitor : public AstVisitor {
     std::unordered_map<std::string, llvm::Value *> namedValues;
     llvm::Value *lastValue = nullptr;
 
+    std::unordered_map<std::string, std::unique_ptr<Type>> namedTypes;
+
+    std::string filename;
     bool verbose;
 
     // Helper methods
@@ -59,7 +62,7 @@ class CodegenVisitor : public AstVisitor {
     llvm::Value *generateExpr(AstNode *node);
     llvm::Type *toLLVMType(const Type &type);
 
-    /* TODO:
+    void optimize();
+
     void emitObjectFile(const std::string &filename);
-    */
 };

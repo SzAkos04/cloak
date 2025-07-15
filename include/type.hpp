@@ -122,4 +122,48 @@ struct Type {
             return "UnknownType";
         }
     }
+
+    bool isInteger() const {
+        if (kind != Kind::Primary) {
+            return false;
+        }
+        switch (data.primary) {
+        case PrimaryType::I8:
+        case PrimaryType::I16:
+        case PrimaryType::I32:
+        case PrimaryType::I64:
+        case PrimaryType::U8:
+        case PrimaryType::U16:
+        case PrimaryType::U32:
+        case PrimaryType::U64:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    bool isFloat() const {
+        if (kind != Kind::Primary) {
+            return false;
+        }
+        return data.primary == PrimaryType::F32 ||
+               data.primary == PrimaryType::F64;
+    }
+
+    bool isSigned() const {
+        if (kind != Kind::Primary) {
+            return false;
+        }
+        switch (data.primary) {
+        case PrimaryType::I8:
+        case PrimaryType::I16:
+        case PrimaryType::I32:
+        case PrimaryType::I64:
+            return true;
+        default:
+            return false;
+        }
+    }
+
+    bool isUnsigned() const { return isInteger() && !isSigned(); }
 };

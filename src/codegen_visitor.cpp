@@ -1,16 +1,30 @@
 #include "codegen_visitor.hpp"
 
 #include "ast.hpp"
+#include "logger.hpp"
+#include "type.hpp"
 
 #include <fmt/core.h>
 #include <llvm/CodeGen/CommandFlags.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/LegacyPassManager.h>
+#include <llvm/IR/PassManager.h>
 #include <llvm/IR/Verifier.h>
+#include <llvm/MC/TargetRegistry.h>
+#include <llvm/Passes/OptimizationLevel.h>
+#include <llvm/Passes/PassBuilder.h>
+#include <llvm/Support/CodeGen.h>
 #include <llvm/Support/FileSystem.h>
 #include <llvm/Support/TargetSelect.h>
 #include <llvm/Support/raw_ostream.h>
 #include <llvm/Target/TargetMachine.h>
+#include <llvm/Target/TargetOptions.h>
+#include <llvm/TargetParser/Host.h>
+#include <llvm/TargetParser/Triple.h>
+#include <memory>
+#include <string>
+#include <system_error>
+#include <utility>
 
 void CodegenVisitor::visit(AstProgram &node) {
     this->declareFnPrototypes(node);
@@ -33,6 +47,10 @@ void CodegenVisitor::visit(AstProgram &node) {
             fmt::format("IR verification failed:\n{}", errStream.str()),
             verbose);
     }
+
+    this->optimize();
+
+    this->emitObjectFile(this->filename);
 }
 
 void CodegenVisitor::visit(AstIdentifier &node) {
@@ -43,6 +61,15 @@ void CodegenVisitor::visit(AstIdentifier &node) {
             verbose);
     }
     this->lastValue = it->second;
+
+    auto typeIt = namedTypes.find(node.name);
+    if (typeIt != namedTypes.end()) {
+        node.inferredType = &(*typeIt->second);
+    } else {
+        THROW_CODEGEN(
+            fmt::format("Type of identifier `{}` not found", node.name),
+            verbose);
+    }
 }
 
 void CodegenVisitor::visit(AstLiteral &node) {
@@ -61,20 +88,29 @@ void CodegenVisitor::visit(AstLiteral &node) {
         case PrimaryType::U8:
         case PrimaryType::U16:
         case PrimaryType::U32:
-        case PrimaryType::U64:
+        case PrimaryType::U64: {
             ty = toLLVMType(Type(number.type));
             constVal = llvm::ConstantInt::get(ty, number.value, false);
+            static Type tempType(number.type);
+            node.inferredType = &tempType;
             break;
+        }
 
-        case PrimaryType::F32:
+        case PrimaryType::F32: {
             ty = llvm::Type::getFloatTy(*context);
             constVal = llvm::ConstantFP::get(ty, number.value);
+            static Type tempType(PrimaryType::F32);
+            node.inferredType = &tempType;
             break;
+        }
 
-        case PrimaryType::F64:
+        case PrimaryType::F64: {
             ty = llvm::Type::getDoubleTy(*context);
             constVal = llvm::ConstantFP::get(ty, number.value);
+            static Type tempType(PrimaryType::F64);
+            node.inferredType = &tempType;
             break;
+        }
 
         default:
             THROW_CODEGEN("Unsupported literal numeric type", verbose);
@@ -82,6 +118,8 @@ void CodegenVisitor::visit(AstLiteral &node) {
 
         lastValue = constVal;
     } else if (val.isBool()) {
+        static Type tempType(PrimaryType::Bool);
+        node.inferredType = &tempType;
         lastValue = llvm::ConstantInt::get(llvm::Type::getInt1Ty(*context),
                                            val.getBool() ? 1 : 0);
     } else if (val.isString()) {
@@ -92,6 +130,8 @@ void CodegenVisitor::visit(AstLiteral &node) {
             *module, strConstant->getType(), true,
             llvm::GlobalValue::PrivateLinkage, strConstant, ".str");
 
+        static Type tempType(PrimaryType::String);
+        node.inferredType = &tempType;
         lastValue = builder.CreatePointerCast(
             strVar, llvm::PointerType::getInt8Ty(*context));
     } else {
@@ -109,12 +149,24 @@ void CodegenVisitor::visit(AstUnary &node) {
     node.rhs->accept(*this);
     llvm::Value *operand = lastValue;
 
+    // infer the operand's type (must already be inferred)
+    const Type *operandType = nullptr;
+    if (auto *idNode = dynamic_cast<AstIdentifier *>(node.rhs.get())) {
+        operandType = idNode->inferredType;
+    } else if (auto *litNode = dynamic_cast<AstLiteral *>(node.rhs.get())) {
+        operandType = litNode->inferredType;
+    } else {
+        // fallback or other cases
+    }
+
     switch (node.op) {
     case UnaryOp::Negate:
-        if (operand->getType()->isFloatingPointTy()) {
-            lastValue = builder.CreateFNeg(operand, "negtmp");
-        } else if (operand->getType()->isIntegerTy()) {
-            lastValue = builder.CreateNeg(operand, "negtmp");
+        if (operand->getType()->isFloatingPointTy() ||
+            operand->getType()->isIntegerTy()) {
+            lastValue = operand->getType()->isFloatingPointTy()
+                            ? builder.CreateFNeg(operand, "negtmp")
+                            : builder.CreateNeg(operand, "negtmp");
+            node.inferredType = operandType;
         } else {
             THROW_CODEGEN("Invalid type for unary negate", verbose);
         }
@@ -122,6 +174,8 @@ void CodegenVisitor::visit(AstUnary &node) {
 
     case UnaryOp::Not:
         lastValue = builder.CreateNot(operand, "nottmp");
+        static Type tempType(PrimaryType::Bool);
+        node.inferredType = &tempType;
         break;
 
     default:
@@ -131,35 +185,34 @@ void CodegenVisitor::visit(AstUnary &node) {
 
 void CodegenVisitor::visit(AstBinary &node) {
     node.lhs->accept(*this);
+    const Type *lhsType = node.lhs->inferredType;
     llvm::Value *left = lastValue;
 
     node.rhs->accept(*this);
     llvm::Value *right = lastValue;
 
     bool isFloat = left->getType()->isFloatingPointTy();
+    bool isSigned = lhsType->isSigned();
 
     switch (node.op) {
     case BinaryOp::Add:
         lastValue = isFloat ? builder.CreateFAdd(left, right, "addtmp")
                             : builder.CreateAdd(left, right, "addtmp");
         break;
-
     case BinaryOp::Sub:
         lastValue = isFloat ? builder.CreateFSub(left, right, "subtmp")
                             : builder.CreateSub(left, right, "subtmp");
         break;
-
     case BinaryOp::Mul:
         lastValue = isFloat ? builder.CreateFMul(left, right, "multmp")
                             : builder.CreateMul(left, right, "multmp");
         break;
-
     case BinaryOp::Div:
         if (isFloat) {
             lastValue = builder.CreateFDiv(left, right, "divtmp");
         } else {
-            lastValue = builder.CreateSDiv(
-                left, right, "divtmp"); // TODO: Or CreateUDiv if unsigned
+            lastValue = isSigned ? builder.CreateSDiv(left, right, "sdivtmp")
+                                 : builder.CreateUDiv(left, right, "udivtmp");
         }
         break;
 
@@ -167,34 +220,42 @@ void CodegenVisitor::visit(AstBinary &node) {
         lastValue = isFloat ? builder.CreateFCmpUEQ(left, right, "eqtmp")
                             : builder.CreateICmpEQ(left, right, "eqtmp");
         break;
-
     case BinaryOp::Neq:
         lastValue = isFloat ? builder.CreateFCmpUNE(left, right, "neqtmp")
                             : builder.CreateICmpNE(left, right, "neqtmp");
         break;
-
     case BinaryOp::Lt:
-        lastValue = isFloat ? builder.CreateFCmpULT(left, right, "lttmp")
-                            : builder.CreateICmpSLT(left, right, "lttmp");
+        lastValue = isFloat    ? builder.CreateFCmpULT(left, right, "lttmp")
+                    : isSigned ? builder.CreateICmpSLT(left, right, "lttmp")
+                               : builder.CreateICmpULT(left, right, "lttmp");
         break;
-
     case BinaryOp::Lte:
-        lastValue = isFloat ? builder.CreateFCmpULE(left, right, "ltetmp")
-                            : builder.CreateICmpSLE(left, right, "ltetmp");
+        lastValue = isFloat    ? builder.CreateFCmpULE(left, right, "ltetmp")
+                    : isSigned ? builder.CreateICmpSLE(left, right, "ltetmp")
+                               : builder.CreateICmpULE(left, right, "ltetmp");
         break;
-
     case BinaryOp::Gt:
-        lastValue = isFloat ? builder.CreateFCmpUGT(left, right, "gttmp")
-                            : builder.CreateICmpSGT(left, right, "gttmp");
+        lastValue = isFloat    ? builder.CreateFCmpUGT(left, right, "gttmp")
+                    : isSigned ? builder.CreateICmpSGT(left, right, "gttmp")
+                               : builder.CreateICmpUGT(left, right, "gttmp");
         break;
-
     case BinaryOp::Gte:
-        lastValue = isFloat ? builder.CreateFCmpUGE(left, right, "gtetmp")
-                            : builder.CreateICmpSGE(left, right, "gtetmp");
+        lastValue = isFloat    ? builder.CreateFCmpUGE(left, right, "gtetmp")
+                    : isSigned ? builder.CreateICmpSGE(left, right, "gtetmp")
+                               : builder.CreateICmpUGE(left, right, "gtetmp");
         break;
 
     default:
         THROW_CODEGEN("Unsupported binary operator", verbose);
+    }
+
+    if (node.op == BinaryOp::Eq || node.op == BinaryOp::Neq ||
+        node.op == BinaryOp::Lt || node.op == BinaryOp::Lte ||
+        node.op == BinaryOp::Gt || node.op == BinaryOp::Gte) {
+        static Type tempType(PrimaryType::Bool);
+        node.inferredType = &tempType;
+    } else {
+        node.inferredType = lhsType;
     }
 }
 
@@ -212,9 +273,12 @@ void CodegenVisitor::visit(AstFn &node) {
     // register parameters in symbol table
     unsigned idx = 0;
     for (auto &arg : func->args()) {
-        const std::string &pname = node.params[idx++].name;
+        const std::string &pname = node.params[idx].name;
         arg.setName(pname);
-        namedValues[pname] = &arg;
+        this->namedValues[pname] = &arg;
+        this->namedTypes[pname] =
+            std::make_unique<Type>(std::move(node.params[idx].type));
+        ++idx;
     }
 
     node.body->accept(*this);
@@ -234,6 +298,7 @@ void CodegenVisitor::visit(AstFn &node) {
     // clear symbols local to this function
     for (auto &param : node.params) {
         namedValues.erase(param.name);
+        namedTypes.erase(param.name);
     }
 }
 
@@ -255,6 +320,8 @@ void CodegenVisitor::declareFnPrototypes(const AstProgram &program) {
         if (auto *fn = dynamic_cast<AstFn *>(decl.get())) {
             llvm::Function *function = generatePrototype(*fn);
             namedValues[fn->name] = function; // Optional: store for later use
+            namedTypes[fn->name] =
+                std::make_unique<Type>(Type(PrimaryType::Void));
         } else {
             THROW_CODEGEN("Only functions can be declared at top level",
                           verbose);
@@ -356,6 +423,7 @@ llvm::Type *CodegenVisitor::toLLVMType(const Type &type) {
 
         // attempt to extract constant integer from length expression
         auto *literalNode = dynamic_cast<AstLiteral *>(array.length.get());
+        // TODO: identifier used as length
         if (!literalNode || !literalNode->value.isNumber()) {
             THROW_CODEGEN("Array length must be a numeric literal", verbose);
         }
@@ -375,6 +443,75 @@ llvm::Type *CodegenVisitor::toLLVMType(const Type &type) {
     }
 }
 
-/* TODO:
-void CodegenVisitor::emitObjectFile(const std::string &filename) {}
-*/
+void CodegenVisitor::optimize() {
+    llvm::PassBuilder passBuilder;
+
+    llvm::FunctionAnalysisManager fam;
+    llvm::LoopAnalysisManager lam;
+    llvm::CGSCCAnalysisManager cgam;
+    llvm::ModuleAnalysisManager mam;
+
+    // Register all the basic analyses with the managers.
+    passBuilder.registerModuleAnalyses(mam);
+    passBuilder.registerCGSCCAnalyses(cgam);
+    passBuilder.registerFunctionAnalyses(fam);
+    passBuilder.registerLoopAnalyses(lam);
+    passBuilder.crossRegisterProxies(lam, fam, cgam, mam);
+
+    // Build optimization pipeline (O2-level).
+    llvm::FunctionPassManager fpm =
+        passBuilder.buildFunctionSimplificationPipeline(
+            llvm::OptimizationLevel::O2, llvm::ThinOrFullLTOPhase::None);
+
+    // Run function-level optimizations
+    for (llvm::Function &func : *module) {
+        fpm.run(func, fam);
+    }
+}
+
+void CodegenVisitor::emitObjectFile(const std::string &filename) {
+    llvm::InitializeAllTargetInfos();
+    llvm::InitializeAllTargets();
+    llvm::InitializeAllTargetMCs();
+    llvm::InitializeAllAsmParsers();
+    llvm::InitializeAllAsmPrinters();
+
+    std::string targetTriple = llvm::sys::getDefaultTargetTriple();
+    std::string error;
+    auto target = llvm::TargetRegistry::lookupTarget(targetTriple, error);
+    if (!target) {
+        THROW_CODEGEN(fmt::format("Target lookup failed: {}", error), verbose);
+    }
+
+    std::string CPU = "generic";
+    std::string features = "";
+
+    llvm::TargetOptions opt;
+    auto targetMachine = target->createTargetMachine(
+        targetTriple, CPU, features, opt, llvm::Reloc::PIC_);
+    this->module->setDataLayout(targetMachine->createDataLayout());
+    this->module->setTargetTriple(targetTriple);
+
+    std::error_code EC;
+    llvm::raw_fd_ostream dest(filename, EC, llvm::sys::fs::OF_None);
+
+    if (EC) {
+        THROW_CODEGEN(fmt::format("Failed to open file: {}", EC.message()),
+                      this->verbose);
+    }
+
+    llvm::legacy::PassManager pass;
+    auto fileType = llvm::CodeGenFileType::ObjectFile;
+
+    if (targetMachine->addPassesToEmitFile(pass, dest, nullptr, fileType)) {
+        THROW_CODEGEN(
+            fmt::format("TargetMachine can't emit a file of `ObjectFile` type"),
+            this->verbose);
+    }
+
+    pass.run(*this->module);
+    dest.flush();
+
+    LOG_DEBUG(
+        fmt::format("Object file `{}` emitted successfully", this->filename));
+}

@@ -1,4 +1,4 @@
-CXX := g++
+CXX := clang++
 PROJECT := cloak
 CXXFLAGS := -Wall -Wextra -Werror -Wpedantic -DFMT_HEADER_ONLY
 LDFLAGS ?=
