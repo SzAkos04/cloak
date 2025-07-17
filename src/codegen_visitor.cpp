@@ -1,6 +1,7 @@
 #include "codegen_visitor.hpp"
 
 #include "ast.hpp"
+#include "cli.hpp"
 #include "logger.hpp"
 #include "type.hpp"
 
@@ -50,9 +51,7 @@ void CodegenVisitor::visit(AstProgram &node) {
             this->verbose);
     }
 
-    if (this->optimization) {
-        this->optimize();
-    }
+    this->optimize();
 
     this->emitObjectFile(this->filename);
 }
@@ -490,10 +489,29 @@ void CodegenVisitor::optimize() {
     passBuilder.registerLoopAnalyses(lam);
     passBuilder.crossRegisterProxies(lam, fam, cgam, mam);
 
-    // Build optimization pipeline (O2-level).
+    llvm::OptimizationLevel optLevel;
+    switch (this->optimization) {
+    case Optimization::O0:
+        return;
+    case Optimization::O1:
+        optLevel = llvm::OptimizationLevel::O1;
+        break;
+    case Optimization::O2:
+        optLevel = llvm::OptimizationLevel::O2;
+        break;
+    case Optimization::O3:
+        optLevel = llvm::OptimizationLevel::O3;
+        break;
+    case Optimization::Os:
+        optLevel = llvm::OptimizationLevel::Os;
+        break;
+    case Optimization::Oz:
+        optLevel = llvm::OptimizationLevel::Oz;
+        break;
+    }
     llvm::FunctionPassManager fpm =
         passBuilder.buildFunctionSimplificationPipeline(
-            llvm::OptimizationLevel::O2, llvm::ThinOrFullLTOPhase::None);
+            optLevel, llvm::ThinOrFullLTOPhase::None);
 
     // Run function-level optimizations
     for (llvm::Function &func : *this->module) {

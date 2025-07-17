@@ -1,4 +1,5 @@
 #include "cli.hpp"
+#include "version.hpp"
 
 #include <fmt/core.h>
 #include <iostream>
@@ -51,9 +52,25 @@ void CLI::parse() {
     }
 }
 
-void CLI::help() { std::cout << "cloak help" << std::endl; }
+void CLI::help() {
+    std::cout << R"(cloak - a minimalist compiler
 
-void CLI::version() { std::cout << "cloak version" << std::endl; }
+Usage: cloak [options] <file.ck>
+
+Options:
+  --outfile | -o <file>      Set output filename
+  --opt=[level] | -O[level]  Set optimization level (0, 1, 2, 3, s, z)
+  --color                    Enable color diagnostics
+  --no-color                 Disable color diagnostics
+  --silent                   Suppress all warnings
+  --no-silent                Enable warnings
+  --verbose                  Show verbose debugging
+  --help | -h                Show this help message
+  --version | -v             Show version info)"
+              << std::endl;
+}
+
+void CLI::version() { std::cout << versionMsg << std::endl; }
 
 void CLI::parseShortArg() {
     std::string arg(this->argv[this->cur]);
@@ -67,11 +84,37 @@ void CLI::parseShortArg() {
                               this->opts.verbose);
                 }
                 this->opts.outfile = this->argv[++this->cur];
-                return;
             } else {
                 this->opts.outfile = arg.substr(j + 1);
-                return;
             }
+            break;
+        case 'O': {
+            if (j == arg.size() - 1) {
+                // `-O` with no level specified; default to O1
+                this->opts.opt = Optimization::O1;
+            } else {
+                std::string optStr = arg.substr(j + 1);
+                if (optStr == "0") {
+                    this->opts.opt = Optimization::O0;
+                } else if (optStr == "1") {
+                    this->opts.opt = Optimization::O1;
+                } else if (optStr == "2") {
+                    this->opts.opt = Optimization::O2;
+                } else if (optStr == "3") {
+                    this->opts.opt = Optimization::O3;
+                } else if (optStr == "s") {
+                    this->opts.opt = Optimization::Os;
+                } else if (optStr == "z") {
+                    this->opts.opt = Optimization::Oz;
+                } else {
+                    THROW_CLI(fmt::format("Invalid optimization level `-O{}`. "
+                                          "For help, run `cloak --help`",
+                                          optStr),
+                              this->opts.verbose);
+                }
+            }
+            return; // `-O[level]` terminates argument
+        }
         case 'h':
             this->opts.showHelp = true;
             break;
@@ -90,12 +133,33 @@ void CLI::parseShortArg() {
 
 void CLI::parseLongArg() {
     std::string arg(this->argv[this->cur]);
-    if (arg == "--verbose") {
-        this->opts.verbose = true;
-    } else if (arg == "--help") {
-        this->opts.showHelp = true;
-    } else if (arg == "--version") {
-        this->opts.showVersion = true;
+    if (arg == "--outfile") {
+        if (this->cur + 1 >= this->argc) {
+            THROW_CLI(
+                "`--outfile` requires a filename. For help, run `cloak --help`",
+                this->opts.verbose);
+        }
+        this->opts.outfile = this->argv[++this->cur];
+    } else if (arg.rfind("--opt=", 0) == 0) {
+        std::string level = arg.substr(6);
+        if (level == "0")
+            this->opts.opt = Optimization::O0;
+        else if (level == "1")
+            this->opts.opt = Optimization::O1;
+        else if (level == "2")
+            this->opts.opt = Optimization::O2;
+        else if (level == "3")
+            this->opts.opt = Optimization::O3;
+        else if (level == "s")
+            this->opts.opt = Optimization::Os;
+        else if (level == "z")
+            this->opts.opt = Optimization::Oz;
+        else {
+            THROW_CLI(fmt::format("Invalid optimization level `--opt={}`. For "
+                                  "help, run `cloak --help`",
+                                  level),
+                      this->opts.verbose);
+        }
     } else if (arg == "--color") {
         useColor = true;
     } else if (arg == "--no-color") {
@@ -104,13 +168,12 @@ void CLI::parseLongArg() {
         silent = true;
     } else if (arg == "--no-silent") {
         silent = false;
-    } else if (arg == "--outfile") {
-        if (this->cur + 1 >= this->argc) {
-            THROW_CLI(
-                "`--outfile` requires a filename. For help, run `cloak --help`",
-                this->opts.verbose);
-        }
-        this->opts.outfile = this->argv[++this->cur];
+    } else if (arg == "--verbose") {
+        this->opts.verbose = true;
+    } else if (arg == "--help") {
+        this->opts.showHelp = true;
+    } else if (arg == "--version") {
+        this->opts.showVersion = true;
     } else {
         THROW_CLI(
             fmt::format("Unknown argument `{}`. For help, run `cloak --help`",

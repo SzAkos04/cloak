@@ -11,11 +11,14 @@ class CLIError : public Error {
 #define THROW_CLI(msg, verbose)                                                \
     throw CLIError((msg), (verbose), __FILE__, __LINE__, __func__)
 
+enum class Optimization { O0, O1, O2, O3, Os, Oz };
+
 class CLI {
   public:
     struct Options {
         std::string filename;
         std::string outfile = "./a.o";
+        Optimization opt = Optimization::O0;
         bool showHelp = false;
         bool showVersion = false;
         bool verbose = false;

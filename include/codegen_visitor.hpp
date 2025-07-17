@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ast.hpp"
+#include "cli.hpp"
 #include "error.hpp"
 #include "type.hpp"
 
@@ -24,8 +25,8 @@ class CodegenError : public Error {
 
 class CodegenVisitor : public AstVisitor {
   public:
-    explicit CodegenVisitor(const std::string &filename_, bool optimization_,
-                            bool verbose_)
+    explicit CodegenVisitor(const std::string &filename_,
+                            Optimization optimization_, bool verbose_)
         : context(std::make_unique<llvm::LLVMContext>()),
           module(std::make_unique<llvm::Module>("main_module", *context)),
           builder(*context), filename(filename_), optimization(optimization_),
@@ -57,7 +58,7 @@ class CodegenVisitor : public AstVisitor {
     std::unordered_map<std::string, std::unique_ptr<Type>> namedTypes;
 
     std::string filename;
-    bool optimization;
+    Optimization optimization;
     bool verbose;
 
     // Helper methods

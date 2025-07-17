@@ -60,14 +60,16 @@ int main(int argc, char **argv) {
 #endif
 
         // generate intermediate representation
-        CodegenVisitor codegen(opts.outfile, /*optimization_=*/false,
-                               opts.verbose);
+        CodegenVisitor codegen(opts.outfile, opts.opt, opts.verbose);
         ast->accept(codegen); // may throw CodegenError
 #ifdef DEBUG
         codegen.dumpIR();
 #endif
     } catch (const CLIError &e) {
         LOG_FRIENDLY_ERROR(fmt::format("[CLI] {}", e.what()));
+        return -1;
+    } catch (const FileReaderError &e) {
+        LOG_FRIENDLY_ERROR(fmt::format("[FILEREADER] {}", e.what()));
         return -1;
     } catch (const LexerError &e) {
         LOG_FRIENDLY_ERROR(fmt::format("[LEXER] {}", e.what()));
