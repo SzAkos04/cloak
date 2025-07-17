@@ -41,6 +41,8 @@ enum class TokenType {
     Identifier,
 
     Fn,     // `fn`
+    Let,    // `let`
+    Mut,    // `mut`
     Return, // `return`
 
     Number,
@@ -144,6 +146,11 @@ class Token {
             return "Identifier";
         case TokenType::Fn:
             return "Fn";
+
+        case TokenType::Let:
+            return "Let";
+        case TokenType::Mut:
+            return "Mut";
         case TokenType::Return:
             return "Return";
 

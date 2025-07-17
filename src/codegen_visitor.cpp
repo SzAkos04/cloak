@@ -32,6 +32,8 @@ void CodegenVisitor::visit(AstProgram &node) {
     for (const auto &decl : node.decls) {
         if (auto *fn = dynamic_cast<AstFn *>(decl.get())) {
             fn->accept(*this);
+        } else if (auto *let = dynamic_cast<AstLet *>(decl.get())) {
+            let->accept(*this);
         } else {
             THROW_CODEGEN("Top-level non-function declarations not supported",
                           this->verbose);
@@ -42,33 +44,35 @@ void CodegenVisitor::visit(AstProgram &node) {
     std::string errStr;
     llvm::raw_string_ostream errStream(errStr);
 
-    if (llvm::verifyModule(*module, &errStream)) {
+    if (llvm::verifyModule(*this->module, &errStream)) {
         THROW_CODEGEN(
             fmt::format("IR verification failed:\n{}", errStream.str()),
-            verbose);
+            this->verbose);
     }
 
-    this->optimize();
+    if (this->optimization) {
+        this->optimize();
+    }
 
     this->emitObjectFile(this->filename);
 }
 
 void CodegenVisitor::visit(AstIdentifier &node) {
-    auto it = namedValues.find(node.name);
-    if (it == namedValues.end() || it->second == nullptr) {
+    auto it = this->namedValues.find(node.name);
+    if (it == this->namedValues.end() || it->second == nullptr) {
         THROW_CODEGEN(
             fmt::format("Use of undefined identifier `{}`", node.name),
-            verbose);
+            this->verbose);
     }
     this->lastValue = it->second;
 
-    auto typeIt = namedTypes.find(node.name);
-    if (typeIt != namedTypes.end()) {
+    auto typeIt = this->namedTypes.find(node.name);
+    if (typeIt != this->namedTypes.end()) {
         node.inferredType = &(*typeIt->second);
     } else {
         THROW_CODEGEN(
             fmt::format("Type of identifier `{}` not found", node.name),
-            verbose);
+            this->verbose);
     }
 }
 
@@ -97,7 +101,7 @@ void CodegenVisitor::visit(AstLiteral &node) {
         }
 
         case PrimaryType::F32: {
-            ty = llvm::Type::getFloatTy(*context);
+            ty = llvm::Type::getFloatTy(*this->context);
             constVal = llvm::ConstantFP::get(ty, number.value);
             static Type tempType(PrimaryType::F32);
             node.inferredType = &tempType;
@@ -105,7 +109,7 @@ void CodegenVisitor::visit(AstLiteral &node) {
         }
 
         case PrimaryType::F64: {
-            ty = llvm::Type::getDoubleTy(*context);
+            ty = llvm::Type::getDoubleTy(*this->context);
             constVal = llvm::ConstantFP::get(ty, number.value);
             static Type tempType(PrimaryType::F64);
             node.inferredType = &tempType;
@@ -113,29 +117,29 @@ void CodegenVisitor::visit(AstLiteral &node) {
         }
 
         default:
-            THROW_CODEGEN("Unsupported literal numeric type", verbose);
+            THROW_CODEGEN("Unsupported literal numeric type", this->verbose);
         }
 
         lastValue = constVal;
     } else if (val.isBool()) {
         static Type tempType(PrimaryType::Bool);
         node.inferredType = &tempType;
-        lastValue = llvm::ConstantInt::get(llvm::Type::getInt1Ty(*context),
-                                           val.getBool() ? 1 : 0);
+        lastValue = llvm::ConstantInt::get(
+            llvm::Type::getInt1Ty(*this->context), val.getBool() ? 1 : 0);
     } else if (val.isString()) {
         const std::string &str = val.getString();
         llvm::Constant *strConstant =
-            llvm::ConstantDataArray::getString(*context, str);
+            llvm::ConstantDataArray::getString(*this->context, str);
         llvm::GlobalVariable *strVar = new llvm::GlobalVariable(
-            *module, strConstant->getType(), true,
+            *this->module, strConstant->getType(), true,
             llvm::GlobalValue::PrivateLinkage, strConstant, ".str");
 
         static Type tempType(PrimaryType::String);
         node.inferredType = &tempType;
-        lastValue = builder.CreatePointerCast(
-            strVar, llvm::PointerType::getInt8Ty(*context));
+        lastValue = this->builder.CreatePointerCast(
+            strVar, llvm::PointerType::getInt8Ty(*this->context));
     } else {
-        THROW_CODEGEN("Unsupported literal type", verbose);
+        THROW_CODEGEN("Unsupported literal type", this->verbose);
     }
 }
 
@@ -164,22 +168,22 @@ void CodegenVisitor::visit(AstUnary &node) {
         if (operand->getType()->isFloatingPointTy() ||
             operand->getType()->isIntegerTy()) {
             lastValue = operand->getType()->isFloatingPointTy()
-                            ? builder.CreateFNeg(operand, "negtmp")
-                            : builder.CreateNeg(operand, "negtmp");
+                            ? this->builder.CreateFNeg(operand, "negtmp")
+                            : this->builder.CreateNeg(operand, "negtmp");
             node.inferredType = operandType;
         } else {
-            THROW_CODEGEN("Invalid type for unary negate", verbose);
+            THROW_CODEGEN("Invalid type for unary negate", this->verbose);
         }
         break;
 
     case UnaryOp::Not:
-        lastValue = builder.CreateNot(operand, "nottmp");
+        lastValue = this->builder.CreateNot(operand, "nottmp");
         static Type tempType(PrimaryType::Bool);
         node.inferredType = &tempType;
         break;
 
     default:
-        THROW_CODEGEN("Unsupported unary operator", verbose);
+        THROW_CODEGEN("Unsupported unary operator", this->verbose);
     }
 }
 
@@ -196,57 +200,62 @@ void CodegenVisitor::visit(AstBinary &node) {
 
     switch (node.op) {
     case BinaryOp::Add:
-        lastValue = isFloat ? builder.CreateFAdd(left, right, "addtmp")
-                            : builder.CreateAdd(left, right, "addtmp");
+        lastValue = isFloat ? this->builder.CreateFAdd(left, right, "addtmp")
+                            : this->builder.CreateAdd(left, right, "addtmp");
         break;
     case BinaryOp::Sub:
-        lastValue = isFloat ? builder.CreateFSub(left, right, "subtmp")
-                            : builder.CreateSub(left, right, "subtmp");
+        lastValue = isFloat ? this->builder.CreateFSub(left, right, "subtmp")
+                            : this->builder.CreateSub(left, right, "subtmp");
         break;
     case BinaryOp::Mul:
-        lastValue = isFloat ? builder.CreateFMul(left, right, "multmp")
-                            : builder.CreateMul(left, right, "multmp");
+        lastValue = isFloat ? this->builder.CreateFMul(left, right, "multmp")
+                            : this->builder.CreateMul(left, right, "multmp");
         break;
     case BinaryOp::Div:
         if (isFloat) {
-            lastValue = builder.CreateFDiv(left, right, "divtmp");
+            lastValue = this->builder.CreateFDiv(left, right, "divtmp");
         } else {
-            lastValue = isSigned ? builder.CreateSDiv(left, right, "sdivtmp")
-                                 : builder.CreateUDiv(left, right, "udivtmp");
+            lastValue = isSigned
+                            ? this->builder.CreateSDiv(left, right, "sdivtmp")
+                            : this->builder.CreateUDiv(left, right, "udivtmp");
         }
         break;
 
     case BinaryOp::Eq:
-        lastValue = isFloat ? builder.CreateFCmpUEQ(left, right, "eqtmp")
-                            : builder.CreateICmpEQ(left, right, "eqtmp");
+        lastValue = isFloat ? this->builder.CreateFCmpUEQ(left, right, "eqtmp")
+                            : this->builder.CreateICmpEQ(left, right, "eqtmp");
         break;
     case BinaryOp::Neq:
-        lastValue = isFloat ? builder.CreateFCmpUNE(left, right, "neqtmp")
-                            : builder.CreateICmpNE(left, right, "neqtmp");
+        lastValue = isFloat ? this->builder.CreateFCmpUNE(left, right, "neqtmp")
+                            : this->builder.CreateICmpNE(left, right, "neqtmp");
         break;
     case BinaryOp::Lt:
-        lastValue = isFloat    ? builder.CreateFCmpULT(left, right, "lttmp")
-                    : isSigned ? builder.CreateICmpSLT(left, right, "lttmp")
-                               : builder.CreateICmpULT(left, right, "lttmp");
+        lastValue = isFloat ? this->builder.CreateFCmpULT(left, right, "lttmp")
+                    : isSigned
+                        ? this->builder.CreateICmpSLT(left, right, "lttmp")
+                        : this->builder.CreateICmpULT(left, right, "lttmp");
         break;
     case BinaryOp::Lte:
-        lastValue = isFloat    ? builder.CreateFCmpULE(left, right, "ltetmp")
-                    : isSigned ? builder.CreateICmpSLE(left, right, "ltetmp")
-                               : builder.CreateICmpULE(left, right, "ltetmp");
+        lastValue = isFloat ? this->builder.CreateFCmpULE(left, right, "ltetmp")
+                    : isSigned
+                        ? this->builder.CreateICmpSLE(left, right, "ltetmp")
+                        : this->builder.CreateICmpULE(left, right, "ltetmp");
         break;
     case BinaryOp::Gt:
-        lastValue = isFloat    ? builder.CreateFCmpUGT(left, right, "gttmp")
-                    : isSigned ? builder.CreateICmpSGT(left, right, "gttmp")
-                               : builder.CreateICmpUGT(left, right, "gttmp");
+        lastValue = isFloat ? this->builder.CreateFCmpUGT(left, right, "gttmp")
+                    : isSigned
+                        ? this->builder.CreateICmpSGT(left, right, "gttmp")
+                        : this->builder.CreateICmpUGT(left, right, "gttmp");
         break;
     case BinaryOp::Gte:
-        lastValue = isFloat    ? builder.CreateFCmpUGE(left, right, "gtetmp")
-                    : isSigned ? builder.CreateICmpSGE(left, right, "gtetmp")
-                               : builder.CreateICmpUGE(left, right, "gtetmp");
+        lastValue = isFloat ? this->builder.CreateFCmpUGE(left, right, "gtetmp")
+                    : isSigned
+                        ? this->builder.CreateICmpSGE(left, right, "gtetmp")
+                        : this->builder.CreateICmpUGE(left, right, "gtetmp");
         break;
 
     default:
-        THROW_CODEGEN("Unsupported binary operator", verbose);
+        THROW_CODEGEN("Unsupported binary operator", this->verbose);
     }
 
     if (node.op == BinaryOp::Eq || node.op == BinaryOp::Neq ||
@@ -261,14 +270,15 @@ void CodegenVisitor::visit(AstBinary &node) {
 
 void CodegenVisitor::visit(AstFn &node) {
     // retrieve the function prototype from the module
-    llvm::Function *func = module->getFunction(node.name);
+    llvm::Function *func = this->module->getFunction(node.name);
     if (!func) {
-        THROW_CODEGEN(fmt::format("Function '{}' not declared", node.name),
-                      verbose);
+        THROW_CODEGEN(fmt::format("Function `{}` not declared", node.name),
+                      this->verbose);
     }
 
-    llvm::BasicBlock *entry = llvm::BasicBlock::Create(*context, "entry", func);
-    builder.SetInsertPoint(entry);
+    llvm::BasicBlock *entry =
+        llvm::BasicBlock::Create(*this->context, "entry", func);
+    this->builder.SetInsertPoint(entry);
 
     // register parameters in symbol table
     unsigned idx = 0;
@@ -284,22 +294,42 @@ void CodegenVisitor::visit(AstFn &node) {
     node.body->accept(*this);
 
     // if no terminator, auto-generate
-    if (!builder.GetInsertBlock()->getTerminator()) {
+    if (!this->builder.GetInsertBlock()->getTerminator()) {
         if (node.retType.kind == Type::Kind::Primary &&
             node.retType.data.primary == PrimaryType::Void) {
-            builder.CreateRetVoid();
+            this->builder.CreateRetVoid();
         } else {
             llvm::Type *retTy = toLLVMType(node.retType);
             llvm::Value *zero = llvm::Constant::getNullValue(retTy);
-            builder.CreateRet(zero);
+            this->builder.CreateRet(zero);
         }
     }
 
     // clear symbols local to this function
     for (auto &param : node.params) {
-        namedValues.erase(param.name);
-        namedTypes.erase(param.name);
+        this->namedValues.erase(param.name);
+        this->namedTypes.erase(param.name);
     }
+}
+
+void CodegenVisitor::visit(AstLet &node) {
+    llvm::Type *llvmTy = toLLVMType(node.type);
+
+    // Allocate memory on the stack for the variable
+    llvm::Function *func = this->builder.GetInsertBlock()->getParent();
+    llvm::IRBuilder<> tmpBuilder(&func->getEntryBlock(),
+                                 func->getEntryBlock().begin());
+    llvm::AllocaInst *alloca =
+        tmpBuilder.CreateAlloca(llvmTy, nullptr, node.name);
+
+    if (node.expr) {
+        llvm::Value *initVal = generateExpr(node.expr.get());
+
+        this->builder.CreateStore(initVal, alloca);
+    }
+
+    this->namedValues[node.name] = alloca;
+    this->namedTypes[node.name] = std::make_unique<Type>(std::move(node.type));
 }
 
 void CodegenVisitor::visit(AstReturn &node) {
@@ -309,9 +339,9 @@ void CodegenVisitor::visit(AstReturn &node) {
     }
 
     if (retVal) {
-        builder.CreateRet(retVal);
+        this->builder.CreateRet(retVal);
     } else {
-        builder.CreateRetVoid();
+        this->builder.CreateRetVoid();
     }
 }
 
@@ -319,12 +349,13 @@ void CodegenVisitor::declareFnPrototypes(const AstProgram &program) {
     for (const auto &decl : program.decls) {
         if (auto *fn = dynamic_cast<AstFn *>(decl.get())) {
             llvm::Function *function = generatePrototype(*fn);
-            namedValues[fn->name] = function; // Optional: store for later use
-            namedTypes[fn->name] =
+            this->namedValues[fn->name] =
+                function; // Optional: store for later use
+            this->namedTypes[fn->name] =
                 std::make_unique<Type>(Type(PrimaryType::Void));
         } else {
             THROW_CODEGEN("Only functions can be declared at top level",
-                          verbose);
+                          this->verbose);
         }
     }
 }
@@ -339,7 +370,7 @@ llvm::Function *CodegenVisitor::generatePrototype(const AstFn &fn) {
         llvm::FunctionType::get(toLLVMType(fn.retType), paramTypes, false);
 
     llvm::Function *function = llvm::Function::Create(
-        fnType, llvm::Function::ExternalLinkage, fn.name, *module);
+        fnType, llvm::Function::ExternalLinkage, fn.name, *this->module);
 
     unsigned idx = 0;
     for (auto &arg : function->args()) {
@@ -370,7 +401,7 @@ llvm::Value *CodegenVisitor::generateExpr(AstNode *node) {
         break;
     // Add other expression node kinds as needed.
     default:
-        THROW_CODEGEN("Unsupported expression node", verbose);
+        THROW_CODEGEN("Unsupported expression node", this->verbose);
     }
 
     return lastValue;
@@ -381,36 +412,36 @@ llvm::Type *CodegenVisitor::toLLVMType(const Type &type) {
     case Type::Kind::Primary:
         switch (type.data.primary) {
         case PrimaryType::I8:
-            return llvm::Type::getInt8Ty(*context);
+            return llvm::Type::getInt8Ty(*this->context);
         case PrimaryType::I16:
-            return llvm::Type::getInt16Ty(*context);
+            return llvm::Type::getInt16Ty(*this->context);
         case PrimaryType::I32:
-            return llvm::Type::getInt32Ty(*context);
+            return llvm::Type::getInt32Ty(*this->context);
         case PrimaryType::I64:
-            return llvm::Type::getInt64Ty(*context);
+            return llvm::Type::getInt64Ty(*this->context);
 
         case PrimaryType::U8:
-            return llvm::Type::getInt8Ty(*context);
+            return llvm::Type::getInt8Ty(*this->context);
         case PrimaryType::U16:
-            return llvm::Type::getInt16Ty(*context);
+            return llvm::Type::getInt16Ty(*this->context);
         case PrimaryType::U32:
-            return llvm::Type::getInt32Ty(*context);
+            return llvm::Type::getInt32Ty(*this->context);
         case PrimaryType::U64:
-            return llvm::Type::getInt64Ty(*context);
+            return llvm::Type::getInt64Ty(*this->context);
 
         case PrimaryType::F32:
-            return llvm::Type::getFloatTy(*context);
+            return llvm::Type::getFloatTy(*this->context);
         case PrimaryType::F64:
-            return llvm::Type::getDoubleTy(*context);
+            return llvm::Type::getDoubleTy(*this->context);
 
         case PrimaryType::Bool:
-            return llvm::Type::getInt1Ty(*context);
+            return llvm::Type::getInt1Ty(*this->context);
 
         case PrimaryType::Void:
-            return llvm::Type::getVoidTy(*context);
+            return llvm::Type::getVoidTy(*this->context);
 
         case PrimaryType::String:
-            return llvm::PointerType::getInt8Ty(*context);
+            return llvm::PointerType::getInt8Ty(*this->context);
 
         default:
             THROW_CODEGEN("Unknown primary type", this->verbose);
@@ -425,13 +456,14 @@ llvm::Type *CodegenVisitor::toLLVMType(const Type &type) {
         auto *literalNode = dynamic_cast<AstLiteral *>(array.length.get());
         // TODO: identifier used as length
         if (!literalNode || !literalNode->value.isNumber()) {
-            THROW_CODEGEN("Array length must be a numeric literal", verbose);
+            THROW_CODEGEN("Array length must be a numeric literal",
+                          this->verbose);
         }
 
         const auto number = literalNode->value.getNumber();
         if (number.type != PrimaryType::I32 &&
             number.type != PrimaryType::U32) {
-            THROW_CODEGEN("Array length must be i32 or u32", verbose);
+            THROW_CODEGEN("Array length must be i32 or u32", this->verbose);
         }
 
         uint64_t length = static_cast<uint64_t>(number.value);
@@ -464,7 +496,7 @@ void CodegenVisitor::optimize() {
             llvm::OptimizationLevel::O2, llvm::ThinOrFullLTOPhase::None);
 
     // Run function-level optimizations
-    for (llvm::Function &func : *module) {
+    for (llvm::Function &func : *this->module) {
         fpm.run(func, fam);
     }
 }
@@ -480,7 +512,8 @@ void CodegenVisitor::emitObjectFile(const std::string &filename) {
     std::string error;
     auto target = llvm::TargetRegistry::lookupTarget(targetTriple, error);
     if (!target) {
-        THROW_CODEGEN(fmt::format("Target lookup failed: {}", error), verbose);
+        THROW_CODEGEN(fmt::format("Target lookup failed: {}", error),
+                      this->verbose);
     }
 
     std::string CPU = "generic";

@@ -212,6 +212,8 @@ Token Lexer::number() {
 
 static const std::unordered_map<std::string, TokenType> keywords = {
     {"fn", TokenType::Fn},
+    {"let", TokenType::Let},
+    {"mut", TokenType::Mut},
     {"return", TokenType::Return},
 };
 

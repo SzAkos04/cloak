@@ -60,7 +60,8 @@ int main(int argc, char **argv) {
 #endif
 
         // generate intermediate representation
-        CodegenVisitor codegen(opts.outfile, opts.verbose);
+        CodegenVisitor codegen(opts.outfile, /*optimization_=*/false,
+                               opts.verbose);
         ast->accept(codegen); // may throw CodegenError
 #ifdef DEBUG
         codegen.dumpIR();

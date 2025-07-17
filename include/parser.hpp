@@ -53,5 +53,6 @@ class Parser {
     AstNodePtr parseBlock();
 
     AstNodePtr parseFn();
+    AstNodePtr parseLet();
     AstNodePtr parseReturn();
 };

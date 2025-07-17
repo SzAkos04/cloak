@@ -5,6 +5,7 @@
 
 #include <fmt/core.h>
 #include <memory>
+#include <utility>
 
 std::unique_ptr<AstProgram> Parser::parseProgram() {
     std::vector<AstNodePtr> decls;
@@ -42,6 +43,8 @@ bool Parser::match(TokenType type) {
 AstNodePtr Parser::parseDecl() {
     if (this->check(TokenType::Fn)) {
         return this->parseFn();
+    } else if (this->check(TokenType::Let)) {
+        return this->parseLet();
     }
 
     THROW_PARSER(this->peek().getLine(), "Expected declaration", this->verbose);
@@ -51,6 +54,8 @@ AstNodePtr Parser::parseDecl() {
 AstNodePtr Parser::parseStmt() {
     Token tok = this->peek();
     switch (tok.getType()) {
+    case TokenType::Let:
+        return this->parseLet();
     case TokenType::Return:
         return this->parseReturn();
     default:
@@ -136,9 +141,9 @@ Type Parser::parseArr() {
     }
     // `<` is consumed
 
-    Type element_type = this->parseType();
-    std::unique_ptr<Type> element_type_ptr =
-        std::make_unique<Type>(std::move(element_type));
+    Type elementType = this->parseType();
+    std::unique_ptr<Type> elementTypePtr =
+        std::make_unique<Type>(std::move(elementType));
 
     if (!this->match(TokenType::Comma)) {
         THROW_PARSER(
@@ -157,7 +162,7 @@ Type Parser::parseArr() {
             this->verbose);
     }
 
-    Type arr(std::move(element_type_ptr), std::move(expr));
+    Type arr(std::move(elementTypePtr), std::move(expr));
 
     return arr;
 }
@@ -322,13 +327,13 @@ AstNodePtr Parser::parseBlock() {
             this->verbose);
     } // `{` consumed
 
-    std::vector<AstNodePtr> stmts_;
+    std::vector<AstNodePtr> stmts;
 
     while (!this->match(TokenType::RBrace) || !this->isAtEnd()) {
-        stmts_.push_back(this->parseStmt());
+        stmts.push_back(this->parseStmt());
     } // `}` consumed
 
-    return std::make_unique<AstBlock>(std::move(stmts_));
+    return std::make_unique<AstBlock>(std::move(stmts));
 }
 
 AstNodePtr Parser::parseFn() {
@@ -339,7 +344,7 @@ AstNodePtr Parser::parseFn() {
                      this->verbose);
     } // `fn` consumed
 
-    Token name_tok = peek();
+    Token nameTok = peek();
     if (!this->match(TokenType::Identifier)) {
         THROW_PARSER(this->peek().getLine(),
                      fmt::format("Expected identifier, found `{}`",
@@ -358,7 +363,7 @@ AstNodePtr Parser::parseFn() {
 
     if (!this->match(TokenType::RParen)) {
         while (true) {
-            Token param_name_tok = this->peek();
+            Token paramNameTok = this->peek();
             if (!this->match(TokenType::Identifier)) {
                 THROW_PARSER(this->peek().getLine(),
                              fmt::format("Expected parameter name, found `{}`",
@@ -374,16 +379,18 @@ AstNodePtr Parser::parseFn() {
                     this->verbose);
             } // `:` consumed
 
-            Type param_type = this->parseType();
+            Type paramType = this->parseType(); // parameter type consumed
 
             params.push_back(
-                Param(param_name_tok.getLexeme(), std::move(param_type)));
+                Param(paramNameTok.getLexeme(), std::move(paramType)));
 
             if (this->match(TokenType::Comma)) {
                 continue; // continue parsing
-            } else if (this->match(TokenType::RParen)) {
+            } // possible `,` consumed
+            else if (this->match(TokenType::RParen)) {
                 break; // stop parsing params
-            } else {
+            } // `)` consumed
+            else {
                 THROW_PARSER(
                     this->peek().getLine(),
                     fmt::format(
@@ -399,14 +406,67 @@ AstNodePtr Parser::parseFn() {
             this->peek().getLine(),
             fmt::format("Expected `:`, found `{}`", this->peek().getLexeme()),
             this->verbose);
-    }
+    } // `:` consumed
 
-    Type ret_type = this->parseType();
+    Type retType = this->parseType(); // type consumed
 
-    AstNodePtr body = this->parseBlock();
+    AstNodePtr body = this->parseBlock(); // block consumed
 
-    return std::make_unique<AstFn>(name_tok.getLexeme(), std::move(params),
-                                   std::move(ret_type), std::move(body));
+    return std::make_unique<AstFn>(nameTok.getLexeme(), std::move(params),
+                                   std::move(retType), std::move(body));
+}
+
+AstNodePtr Parser::parseLet() {
+    if (!this->match(TokenType::Let)) {
+        THROW_PARSER(this->peek().getLine(),
+                     fmt::format("Expected `let` keyword, found `{}`",
+                                 this->peek().getLexeme()),
+                     this->verbose);
+    } // `let` consumed
+
+    bool mut = false;
+    mut = this->match(TokenType::Mut); // possible `mut` consumed
+
+    Token nameTok = peek();
+    if (!this->match(TokenType::Identifier)) {
+        THROW_PARSER(this->peek().getLine(),
+                     fmt::format("Expected identifier, found `{}`",
+                                 this->peek().getLexeme()),
+                     this->verbose);
+    } // identifier consumed
+
+    if (!this->match(TokenType::Colon)) {
+        THROW_PARSER(
+            this->peek().getLine(),
+            fmt::format("Expected `:`, found `{}`", this->peek().getLexeme()),
+            this->verbose);
+    } // `:` consumed
+
+    Type type = this->parseType(); // type consumed
+
+    if (this->match(TokenType::Semicolon)) {
+        return std::make_unique<AstLet>(mut, nameTok.getLexeme(),
+                                        std::move(type), nullptr);
+    } // possible `;` consumed
+    else if (!this->match(TokenType::Equal)) {
+        THROW_PARSER(
+            this->peek().getLine(),
+            fmt::format("Expected `=` or `;` after let statement, found `{}`",
+                        this->peek().getLexeme()),
+            this->verbose);
+    } // `=` consumed
+
+    AstNodePtr expr = this->parseExpr(); // expr consumed
+
+    if (!this->match(TokenType::Semicolon)) {
+        THROW_PARSER(
+            this->peek().getLine(),
+            fmt::format("Expected `;`, found `{}`", this->peek().getLexeme()),
+            this->verbose);
+    } // `;` consumed
+
+    return std::make_unique<AstLet>(mut, nameTok.getLexeme(), std::move(type),
+                                    std::move(expr));
 }
 
 AstNodePtr Parser::parseReturn() {
@@ -421,14 +481,14 @@ AstNodePtr Parser::parseReturn() {
         return std::make_unique<AstReturn>(nullptr);
     }
 
-    AstNodePtr expr = this->parseExpr();
+    AstNodePtr expr = this->parseExpr(); // expr consumed
 
     if (!this->match(TokenType::Semicolon)) {
         THROW_PARSER(
             this->peek().getLine(),
             fmt::format("Expected `;`, found `{}`", this->peek().getLexeme()),
             this->verbose);
-    }
+    } // `;` consumed
 
     return std::make_unique<AstReturn>(std::move(expr));
 }

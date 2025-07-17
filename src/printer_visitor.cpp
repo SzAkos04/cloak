@@ -26,8 +26,7 @@ void PrinterVisitor::visit(AstLiteral &node) {
     indent();
     std::cout << "Literal: ";
     if (node.value.isNumber()) {
-        std::cout << node.value.getNumber().value << " ("
-                  << primaryTypeToString(node.value.getNumber().type) << ")";
+        std::cout << node.value.toString();
     } else if (node.value.isString()) {
         std::cout << "\"" << std::get<std::string>(node.value.value)
                   << "\" (string)";
@@ -120,16 +119,37 @@ void PrinterVisitor::visit(AstFn &node) {
     std::cout << "Function: " << node.name << "(";
     for (size_t i = 0; i < node.params.size(); ++i) {
         const auto &param = node.params[i];
-        std::cout << param.name << ": "
-                  << primaryTypeToString(param.type.data.primary);
-        if (i + 1 < node.params.size())
+        std::cout << param.name << ": " << param.type.toString();
+        if (i + 1 < node.params.size()) {
             std::cout << ", ";
+        }
     }
-    std::cout << ") -> " << primaryTypeToString(node.retType.data.primary)
-              << "\n";
+    std::cout << ") -> " << node.retType.toString() << "\n";
 
     this->indentLevel++;
     node.body->accept(*this);
+    this->indentLevel--;
+}
+
+void PrinterVisitor::visit(AstLet &node) {
+    indent();
+    std::cout << "Let: ";
+    if (node.mut) {
+        std::cout << "mut ";
+    }
+    std::cout << node.name << ": " << node.type.toString() << "\n";
+
+    this->indentLevel++;
+    if (node.expr) {
+        indent();
+        std::cout << "Initializer:\n";
+        this->indentLevel++;
+        node.expr->accept(*this);
+        this->indentLevel--;
+    } else {
+        indent();
+        std::cout << "(no initializer)\n";
+    }
     this->indentLevel--;
 }
 

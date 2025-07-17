@@ -5,6 +5,8 @@
 #include "type.hpp"
 
 #include <memory>
+#include <string>
+#include <utility>
 #include <vector>
 
 struct AstVisitor;
@@ -106,6 +108,7 @@ enum class AstNodeKind {
     Unary,
     Binary,
     Fn,
+    Let,
     Return,
 };
 
@@ -202,6 +205,19 @@ struct AstFn : AstNode {
     AstNodeKind kind() const override { return AstNodeKind::Fn; }
 };
 
+struct AstLet : AstNode {
+    bool mut;
+    std::string name;
+    Type type;
+    AstNodePtr expr;
+
+    AstLet(bool mut_, std::string name_, Type type_, AstNodePtr expr_)
+        : mut(mut_), name(std::move(name_)), type(std::move(type_)),
+          expr(std::move(expr_)) {}
+    void accept(AstVisitor &visitor) override;
+    AstNodeKind kind() const override { return AstNodeKind::Let; }
+};
+
 struct AstReturn : AstNode {
     AstNodePtr expr;
 
@@ -222,6 +238,7 @@ struct AstVisitor {
     virtual void visit(AstUnary &) {}
     virtual void visit(AstBinary &) {}
     virtual void visit(AstFn &) {}
+    virtual void visit(AstLet &) {}
     virtual void visit(AstReturn &) {}
     virtual ~AstVisitor() = default;
 };
@@ -233,6 +250,7 @@ inline void AstBlock::accept(AstVisitor &v) { v.visit(*this); }
 inline void AstUnary::accept(AstVisitor &v) { v.visit(*this); }
 inline void AstBinary::accept(AstVisitor &v) { v.visit(*this); }
 inline void AstFn::accept(AstVisitor &v) { v.visit(*this); }
+inline void AstLet::accept(AstVisitor &v) { v.visit(*this); }
 inline void AstReturn::accept(AstVisitor &v) { v.visit(*this); }
 
 inline AstNodeKind AstNode::kind() const { return AstNodeKind::Program; }
