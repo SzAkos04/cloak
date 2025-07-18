@@ -174,6 +174,12 @@ void CLI::parseLongArg() {
         this->opts.showHelp = true;
     } else if (arg == "--version") {
         this->opts.showVersion = true;
+    } else if (arg == "--dump-tokens") {
+        this->opts.dumpTokens = true;
+    } else if (arg == "--dump-ast") {
+        this->opts.dumpAst = true;
+    } else if (arg == "--dump-ir") {
+        this->opts.dumpIR = true;
     } else {
         THROW_CLI(
             fmt::format("Unknown argument `{}`. For help, run `cloak --help`",

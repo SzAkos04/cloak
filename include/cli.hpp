@@ -21,6 +21,9 @@ class CLI {
         Optimization opt = Optimization::O0;
         bool showHelp = false;
         bool showVersion = false;
+        bool dumpTokens = false;
+        bool dumpAst = false;
+        bool dumpIR = false;
         bool verbose = false;
     };
 

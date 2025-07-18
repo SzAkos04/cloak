@@ -4,16 +4,14 @@
 #include "lexer.hpp"
 #include "logger.hpp"
 #include "parser.hpp"
+#include "printer_visitor.hpp"
 #include "token.hpp"
 
 #include <fmt/core.h>
 #include <string>
 #include <vector>
-#ifdef DEBUG
-#include "printer_visitor.hpp"
 
 #include <iostream>
-#endif
 
 int main(int argc, char **argv) {
     try {
@@ -36,35 +34,34 @@ int main(int argc, char **argv) {
         FileReader reader(opts.verbose);
         std::string contents =
             reader.readFile(opts.filename); // may throw FileReaderError
-#ifdef DEBUG
-        std::cout << contents << std::endl;
-#endif
 
         // tokenize source code
         Lexer lexer(contents, opts.verbose);
         std::vector<Token> tokens = lexer.lex(); // may throw LexerError
-#ifdef DEBUG
-        for (const auto &token : tokens) {
-            std::cout << token.toString() << std::endl;
+        if (opts.dumpTokens) {
+            for (const auto &token : tokens) {
+                std::cout << token.toString() << std::endl;
+            }
+            std::cout << std::endl;
         }
-#endif
 
         // parse tokens into AST
         Parser parser(tokens, opts.verbose);
         std::unique_ptr<AstProgram> ast =
             parser.parseProgram(); // may throw ParserError
-
-#ifdef DEBUG
-        PrinterVisitor printer;
-        ast->accept(printer);
-#endif
+        if (opts.dumpAst) {
+            PrinterVisitor printer;
+            ast->accept(printer);
+            std::cout << std::endl;
+        }
 
         // generate intermediate representation
         CodegenVisitor codegen(opts.outfile, opts.opt, opts.verbose);
         ast->accept(codegen); // may throw CodegenError
-#ifdef DEBUG
-        codegen.dumpIR();
-#endif
+        if (opts.dumpIR) {
+            codegen.dumpIR();
+            std::cout << std::endl;
+        }
     } catch (const CLIError &e) {
         LOG_FRIENDLY_ERROR(fmt::format("[CLI] {}", e.what()));
         return -1;

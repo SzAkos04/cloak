@@ -2,7 +2,6 @@
 
 #include "ast.hpp"
 #include "cli.hpp"
-#include "logger.hpp"
 #include "type.hpp"
 
 #include <fmt/core.h>
@@ -410,10 +409,10 @@ void CodegenVisitor::generateGlobalVariable(const AstLet &let) {
 
     llvm::GlobalVariable *globalVar = new llvm::GlobalVariable(
         *this->module, llvmTy,
-        !let.mut, // isConstant
-        llvm::GlobalValue::ExternalLinkage, initConstant, let.name);
+        /*isConstant=*/!let.mut, llvm::GlobalValue::ExternalLinkage,
+        initConstant, let.name);
 
-    this->declareSymbol(let.name, &let.type, /*mut=*/false, globalVar);
+    this->declareSymbol(let.name, &let.type, let.mut, globalVar);
 }
 
 llvm::Value *CodegenVisitor::generateExpr(AstNode *node) {
@@ -603,7 +602,4 @@ void CodegenVisitor::emitObjectFile(const std::string &filename) {
 
     pass.run(*this->module);
     dest.flush();
-
-    LOG_DEBUG(
-        fmt::format("Object file `{}` emitted successfully", this->filename));
 }
