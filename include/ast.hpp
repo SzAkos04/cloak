@@ -119,6 +119,7 @@ struct AstNode {
     virtual ~AstNode() = default;
     virtual void accept(AstVisitor &visitor) = 0;
     virtual AstNodeKind kind() const;
+    virtual AstNodePtr clone() const = 0;
 
     const Type *inferredType = nullptr;
 };
@@ -134,6 +135,7 @@ struct AstProgram : AstNode {
 
     void accept(AstVisitor &visitor) override;
     AstNodeKind kind() const override { return AstNodeKind::Program; }
+    AstNodePtr clone() const override;
 };
 
 struct AstIdentifier : AstNode {
@@ -142,6 +144,7 @@ struct AstIdentifier : AstNode {
     explicit AstIdentifier(std::string name_) : name(std::move(name_)) {}
     void accept(AstVisitor &visitor) override;
     AstNodeKind kind() const override { return AstNodeKind::Identifier; }
+    AstNodePtr clone() const override;
 };
 
 struct AstLiteral : AstNode {
@@ -150,6 +153,7 @@ struct AstLiteral : AstNode {
     explicit AstLiteral(Literal value_) : value(std::move(value_)) {}
     void accept(AstVisitor &visitor) override;
     AstNodeKind kind() const override { return AstNodeKind::Literal; }
+    AstNodePtr clone() const override;
 };
 
 struct AstBlock : AstNode {
@@ -158,6 +162,7 @@ struct AstBlock : AstNode {
     AstBlock(std::vector<AstNodePtr> stmts_) : stmts(std::move(stmts_)) {}
     void accept(AstVisitor &visitor) override;
     AstNodeKind kind() const override { return AstNodeKind::Block; }
+    AstNodePtr clone() const override;
 };
 
 struct AstUnary : AstNode {
@@ -167,6 +172,7 @@ struct AstUnary : AstNode {
     AstUnary(UnaryOp op_, AstNodePtr rhs_) : op(op_), rhs(std::move(rhs_)) {}
     void accept(AstVisitor &visitor) override;
     AstNodeKind kind() const override { return AstNodeKind::Unary; }
+    AstNodePtr clone() const override;
 };
 
 struct AstBinary : AstNode {
@@ -178,6 +184,7 @@ struct AstBinary : AstNode {
         : lhs(std::move(lhs_)), op(op_), rhs(std::move(rhs_)) {}
     void accept(AstVisitor &visitor) override;
     AstNodeKind kind() const override { return AstNodeKind::Binary; }
+    AstNodePtr clone() const override;
 };
 
 struct Param {
@@ -203,6 +210,7 @@ struct AstFn : AstNode {
           retType(std::move(retType_)), body(std::move(body_)) {}
     void accept(AstVisitor &visitor) override;
     AstNodeKind kind() const override { return AstNodeKind::Fn; }
+    AstNodePtr clone() const override;
 };
 
 struct AstLet : AstNode {
@@ -216,6 +224,7 @@ struct AstLet : AstNode {
           expr(std::move(expr_)) {}
     void accept(AstVisitor &visitor) override;
     AstNodeKind kind() const override { return AstNodeKind::Let; }
+    AstNodePtr clone() const override;
 };
 
 struct AstReturn : AstNode {
@@ -224,6 +233,7 @@ struct AstReturn : AstNode {
     AstReturn(AstNodePtr expr) : expr(std::move(expr)) {}
     void accept(AstVisitor &visitor) override;
     AstNodeKind kind() const override { return AstNodeKind::Return; }
+    AstNodePtr clone() const override;
 };
 
 //
@@ -254,3 +264,58 @@ inline void AstLet::accept(AstVisitor &v) { v.visit(*this); }
 inline void AstReturn::accept(AstVisitor &v) { v.visit(*this); }
 
 inline AstNodeKind AstNode::kind() const { return AstNodeKind::Program; }
+
+inline AstNodePtr AstProgram::clone() const {
+    std::vector<AstNodePtr> clonedDecls;
+    clonedDecls.reserve(decls.size());
+    for (const auto &decl : decls) {
+        clonedDecls.push_back(decl->clone());
+    }
+    return std::make_unique<AstProgram>(std::move(clonedDecls));
+}
+
+inline AstNodePtr AstIdentifier::clone() const {
+    return std::make_unique<AstIdentifier>(name);
+}
+
+inline AstNodePtr AstLiteral::clone() const {
+    return std::make_unique<AstLiteral>(value);
+}
+
+inline AstNodePtr AstBlock::clone() const {
+    std::vector<AstNodePtr> clonedStmts;
+    clonedStmts.reserve(stmts.size());
+    for (const auto &stmt : stmts) {
+        clonedStmts.push_back(stmt->clone());
+    }
+    return std::make_unique<AstBlock>(std::move(clonedStmts));
+}
+
+inline AstNodePtr AstUnary::clone() const {
+    return std::make_unique<AstUnary>(op, rhs ? rhs->clone() : nullptr);
+}
+
+inline AstNodePtr AstBinary::clone() const {
+    return std::make_unique<AstBinary>(lhs ? lhs->clone() : nullptr, op,
+                                       rhs ? rhs->clone() : nullptr);
+}
+
+inline AstNodePtr AstFn::clone() const {
+    std::vector<Param> clonedParams;
+    clonedParams.reserve(params.size());
+    for (const auto &param : params) {
+        clonedParams.emplace_back(param.name, Type(param.type));
+    }
+
+    return std::make_unique<AstFn>(name, std::move(clonedParams), Type(retType),
+                                   body ? body->clone() : nullptr);
+}
+
+inline AstNodePtr AstLet::clone() const {
+    return std::make_unique<AstLet>(mut, name, Type(type),
+                                    expr ? expr->clone() : nullptr);
+}
+
+inline AstNodePtr AstReturn::clone() const {
+    return std::make_unique<AstReturn>(expr ? expr->clone() : nullptr);
+}

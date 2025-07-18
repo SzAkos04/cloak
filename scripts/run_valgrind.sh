@@ -14,7 +14,7 @@ valgrind --leak-check=full     \
          --track-origins=yes   \
          --verbose             \
          --log-file="$LOGFILE" \
-         ./build/cloak ./test/test.ck
+         ./build/cloak ./tests/test.ck
 
 echo -e "${GREEN}[OK]${RESET} Valgrind finished. Log saved to $LOGFILE"
 echo -e "${CYAN}[INFO]${RESET} Extracting leak summary..."

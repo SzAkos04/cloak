@@ -22,9 +22,21 @@ cloak [options] <file.ck>
 | `-h`, `--help`               | Show help message                                     |
 | `-v`, `--version`            | Show version info                                     |
 
-## Examples
+## Example Program
 
-Compiling with default output name:
+Here is a simple example of a Cloak Language program:
+
+```cloak
+fn main(): i32 {
+    let x = 0;
+
+    return x;
+}
+```
+
+## Compilation Examples
+
+### Compiling with default output name:
 
 ```bash
 cloak program.ck # create an `a.o` object file
@@ -32,7 +44,7 @@ clang a.o # link the object file
 ./a.out # run executable
 ```
 
-Compile specifying the output name:
+### Compile specifying the output name:
 
 ```bash
 cloak program.ck -o program.o # create a `program.o` object file

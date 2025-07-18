@@ -5,6 +5,7 @@
 #include <sstream>
 #include <string>
 #include <utility>
+#include <variant>
 
 enum class PrimaryType {
     I8,
@@ -62,62 +63,39 @@ using AstNodePtr = std::unique_ptr<AstNode>;
 struct Type {
     enum class Kind { Primary, Array } kind;
 
-    union Data {
-        PrimaryType primary;
+    struct ArrayData {
+        std::unique_ptr<Type> elementType;
+        AstNodePtr length;
 
-        struct ArrayData {
-            std::unique_ptr<Type> elementType;
-            AstNodePtr length;
+        ArrayData(std::unique_ptr<Type> elem, AstNodePtr len)
+            : elementType(std::move(elem)), length(std::move(len)) {}
 
-            ArrayData(std::unique_ptr<Type> elem, AstNodePtr len)
-                : elementType(std::move(elem)), length(std::move(len)) {}
+        ArrayData(ArrayData &&other) noexcept = default;
+        ArrayData &operator=(ArrayData &&other) noexcept = default;
 
-            ArrayData(ArrayData &&other) noexcept = default;
-            ArrayData &operator=(ArrayData &&other) noexcept = default;
+        ~ArrayData() = default;
+    };
 
-            ~ArrayData() = default;
-        };
+    std::variant<PrimaryType, ArrayData> data;
 
-        ArrayData array;
+    explicit Type(PrimaryType pt) : kind(Kind::Primary), data(pt) {}
+    Type(std::unique_ptr<Type> elem, AstNodePtr len)
+        : kind(Kind::Array), data(ArrayData(std::move(elem), std::move(len))) {}
 
-        Data() {}
-        ~Data() {}
-    } data;
+    Type(Type &&) noexcept = default;
+    Type &operator=(Type &&) noexcept = default;
 
-    explicit Type(PrimaryType pt) : kind(Kind::Primary) { data.primary = pt; }
-    Type(std::unique_ptr<Type> elem, AstNodePtr len) : kind(Kind::Array) {
-        new (&data.array) Data::ArrayData(std::move(elem), std::move(len));
-    }
+    Type(const Type &other);
 
-    Type(Type &&other) noexcept : kind(other.kind) {
-        if (kind == Kind::Primary) {
-            data.primary = other.data.primary;
-        } else {
-            new (&data.array) Data::ArrayData(std::move(other.data.array));
-        }
-    }
-
-    Type &operator=(Type &&other) noexcept {
-        if (this != &other) {
-            this->~Type();
-            new (this) Type(std::move(other));
-        }
-        return *this;
-    }
-
-    ~Type() {
-        if (kind == Kind::Array) {
-            data.array.~ArrayData();
-        }
-    }
+    ~Type() = default;
 
     std::string toString() const {
         std::ostringstream oss;
         if (kind == Kind::Primary) {
-            return primaryTypeToString(data.primary);
+            return primaryTypeToString(std::get<PrimaryType>(data));
         } else if (kind == Kind::Array) {
-            return fmt::format("arr<{}, _>",
-                               data.array.elementType->toString());
+            const auto &arr = std::get<ArrayData>(data);
+            return fmt::format("arr<{}, _>", arr.elementType->toString());
         } else {
             return "UnknownType";
         }
@@ -127,7 +105,7 @@ struct Type {
         if (kind != Kind::Primary) {
             return false;
         }
-        switch (data.primary) {
+        switch (std::get<PrimaryType>(data)) {
         case PrimaryType::I8:
         case PrimaryType::I16:
         case PrimaryType::I32:
@@ -146,15 +124,15 @@ struct Type {
         if (kind != Kind::Primary) {
             return false;
         }
-        return data.primary == PrimaryType::F32 ||
-               data.primary == PrimaryType::F64;
+        PrimaryType ty = std::get<PrimaryType>(data);
+        return ty == PrimaryType::F32 || ty == PrimaryType::F64;
     }
 
     bool isSigned() const {
         if (kind != Kind::Primary) {
             return false;
         }
-        switch (data.primary) {
+        switch (std::get<PrimaryType>(data)) {
         case PrimaryType::I8:
         case PrimaryType::I16:
         case PrimaryType::I32:

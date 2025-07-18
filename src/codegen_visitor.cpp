@@ -7,9 +7,11 @@
 
 #include <fmt/core.h>
 #include <llvm/CodeGen/CommandFlags.h>
+#include <llvm/IR/Constants.h>
 #include <llvm/IR/DerivedTypes.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/IR/PassManager.h>
+#include <llvm/IR/Type.h>
 #include <llvm/IR/Verifier.h>
 #include <llvm/MC/TargetRegistry.h>
 #include <llvm/Passes/OptimizationLevel.h>
@@ -25,16 +27,16 @@
 #include <memory>
 #include <string>
 #include <system_error>
-#include <utility>
 
 void CodegenVisitor::visit(AstProgram &node) {
-    this->declareFnPrototypes(node);
+    this->declareGlobals(node);
 
     for (const auto &decl : node.decls) {
         if (auto *fn = dynamic_cast<AstFn *>(decl.get())) {
             fn->accept(*this);
-        } else if (auto *let = dynamic_cast<AstLet *>(decl.get())) {
-            let->accept(*this);
+        } else if ([[maybe_unused]] auto *let =
+                       dynamic_cast<AstLet *>(decl.get())) {
+            continue;
         } else {
             THROW_CODEGEN("Top-level non-function declarations not supported",
                           this->verbose);
@@ -46,6 +48,7 @@ void CodegenVisitor::visit(AstProgram &node) {
     llvm::raw_string_ostream errStream(errStr);
 
     if (llvm::verifyModule(*this->module, &errStream)) {
+        this->dumpIR();
         THROW_CODEGEN(
             fmt::format("IR verification failed:\n{}", errStream.str()),
             this->verbose);
@@ -57,22 +60,19 @@ void CodegenVisitor::visit(AstProgram &node) {
 }
 
 void CodegenVisitor::visit(AstIdentifier &node) {
-    auto it = this->namedValues.find(node.name);
-    if (it == this->namedValues.end() || it->second == nullptr) {
+    auto it = this->symbolTable.find(node.name);
+    if (it == this->symbolTable.end()) {
         THROW_CODEGEN(
             fmt::format("Use of undefined identifier `{}`", node.name),
             this->verbose);
     }
-    this->lastValue = it->second;
 
-    auto typeIt = this->namedTypes.find(node.name);
-    if (typeIt != this->namedTypes.end()) {
-        node.inferredType = &(*typeIt->second);
-    } else {
-        THROW_CODEGEN(
-            fmt::format("Type of identifier `{}` not found", node.name),
-            this->verbose);
-    }
+    VariableInfo &info = it->second;
+    llvm::Value *ptr = info.value;
+    llvm::Type *ptrTy = toLLVMType(*info.type);
+
+    node.inferredType = info.type.get();
+    this->lastValue = this->builder.CreateLoad(ptrTy, ptr, "loadtmp");
 }
 
 void CodegenVisitor::visit(AstLiteral &node) {
@@ -152,14 +152,14 @@ void CodegenVisitor::visit(AstUnary &node) {
     node.rhs->accept(*this);
     llvm::Value *operand = lastValue;
 
-    // infer the operand's type (must already be inferred)
     const Type *operandType = nullptr;
     if (auto *idNode = dynamic_cast<AstIdentifier *>(node.rhs.get())) {
         operandType = idNode->inferredType;
     } else if (auto *litNode = dynamic_cast<AstLiteral *>(node.rhs.get())) {
         operandType = litNode->inferredType;
     } else {
-        // fallback or other cases
+        THROW_CODEGEN("Unable to infer type from RHS of unary expression",
+                      this->verbose);
     }
 
     switch (node.op) {
@@ -271,7 +271,7 @@ void CodegenVisitor::visit(AstFn &node) {
     // retrieve the function prototype from the module
     llvm::Function *func = this->module->getFunction(node.name);
     if (!func) {
-        THROW_CODEGEN(fmt::format("Function `{}` not declared", node.name),
+        THROW_CODEGEN(fmt::format("Use of undeclared function `{}`", node.name),
                       this->verbose);
     }
 
@@ -284,9 +284,7 @@ void CodegenVisitor::visit(AstFn &node) {
     for (auto &arg : func->args()) {
         const std::string &pname = node.params[idx].name;
         arg.setName(pname);
-        this->namedValues[pname] = &arg;
-        this->namedTypes[pname] =
-            std::make_unique<Type>(std::move(node.params[idx].type));
+        this->declareSymbol(pname, &node.params[idx].type, /*mut=*/false, &arg);
         ++idx;
     }
 
@@ -295,7 +293,7 @@ void CodegenVisitor::visit(AstFn &node) {
     // if no terminator, auto-generate
     if (!this->builder.GetInsertBlock()->getTerminator()) {
         if (node.retType.kind == Type::Kind::Primary &&
-            node.retType.data.primary == PrimaryType::Void) {
+            std::get<PrimaryType>(node.retType.data) == PrimaryType::Void) {
             this->builder.CreateRetVoid();
         } else {
             llvm::Type *retTy = toLLVMType(node.retType);
@@ -306,16 +304,20 @@ void CodegenVisitor::visit(AstFn &node) {
 
     // clear symbols local to this function
     for (auto &param : node.params) {
-        this->namedValues.erase(param.name);
-        this->namedTypes.erase(param.name);
+        this->symbolTable.erase(param.name);
     }
 }
 
 void CodegenVisitor::visit(AstLet &node) {
     llvm::Type *llvmTy = toLLVMType(node.type);
 
-    // Allocate memory on the stack for the variable
-    llvm::Function *func = this->builder.GetInsertBlock()->getParent();
+    llvm::BasicBlock *currentBlock = this->builder.GetInsertBlock();
+    if (!currentBlock) {
+        THROW_CODEGEN(
+            "IRBuilder has no insertion block when allocating variable",
+            this->verbose);
+    }
+    llvm::Function *func = currentBlock->getParent();
     llvm::IRBuilder<> tmpBuilder(&func->getEntryBlock(),
                                  func->getEntryBlock().begin());
     llvm::AllocaInst *alloca =
@@ -325,10 +327,13 @@ void CodegenVisitor::visit(AstLet &node) {
         llvm::Value *initVal = generateExpr(node.expr.get());
 
         this->builder.CreateStore(initVal, alloca);
+    } else {
+        // always store a value to prevent undefined behavior
+        llvm::Value *zeroVal = llvm::Constant::getNullValue(llvmTy);
+        this->builder.CreateStore(zeroVal, alloca);
     }
 
-    this->namedValues[node.name] = alloca;
-    this->namedTypes[node.name] = std::make_unique<Type>(std::move(node.type));
+    this->declareSymbol(node.name, &node.type, node.mut, alloca);
 }
 
 void CodegenVisitor::visit(AstReturn &node) {
@@ -344,22 +349,28 @@ void CodegenVisitor::visit(AstReturn &node) {
     }
 }
 
-void CodegenVisitor::declareFnPrototypes(const AstProgram &program) {
+void CodegenVisitor::declareSymbol(const std::string &name, const Type *type,
+                                   bool mut, llvm::Value *value) {
+    this->symbolTable.insert_or_assign(
+        name, VariableInfo(value, std::make_unique<Type>(*type), mut));
+}
+
+void CodegenVisitor::declareGlobals(const AstProgram &program) {
     for (const auto &decl : program.decls) {
         if (auto *fn = dynamic_cast<AstFn *>(decl.get())) {
-            llvm::Function *function = generatePrototype(*fn);
-            this->namedValues[fn->name] =
-                function; // Optional: store for later use
-            this->namedTypes[fn->name] =
-                std::make_unique<Type>(Type(PrimaryType::Void));
+            this->declareSymbol(fn->name, &fn->retType, /*mut=*/false,
+                                this->generateFnPrototype(*fn));
+        } else if (auto *let = dynamic_cast<AstLet *>(decl.get())) {
+            this->generateGlobalVariable(*let);
         } else {
-            THROW_CODEGEN("Only functions can be declared at top level",
+            THROW_CODEGEN("Only functions and variable declarations con be "
+                          "declared at top level",
                           this->verbose);
         }
     }
 }
 
-llvm::Function *CodegenVisitor::generatePrototype(const AstFn &fn) {
+llvm::Function *CodegenVisitor::generateFnPrototype(const AstFn &fn) {
     std::vector<llvm::Type *> paramTypes;
     for (const auto &param : fn.params) {
         paramTypes.push_back(toLLVMType(param.type));
@@ -379,12 +390,37 @@ llvm::Function *CodegenVisitor::generatePrototype(const AstFn &fn) {
     return function;
 }
 
+void CodegenVisitor::generateGlobalVariable(const AstLet &let) {
+    llvm::Type *llvmTy = toLLVMType(let.type);
+
+    llvm::Constant *initConstant = nullptr;
+
+    if (let.expr) {
+        llvm::Value *initVal = generateExpr(let.expr.get());
+
+        if (auto *constVal = llvm::dyn_cast<llvm::Constant>(initVal)) {
+            initConstant = constVal;
+        } else {
+            THROW_CODEGEN("Global variable initializer must be a constant",
+                          this->verbose);
+        }
+    } else {
+        initConstant = llvm::Constant::getNullValue(llvmTy);
+    }
+
+    llvm::GlobalVariable *globalVar = new llvm::GlobalVariable(
+        *this->module, llvmTy,
+        !let.mut, // isConstant
+        llvm::GlobalValue::ExternalLinkage, initConstant, let.name);
+
+    this->declareSymbol(let.name, &let.type, /*mut=*/false, globalVar);
+}
+
 llvm::Value *CodegenVisitor::generateExpr(AstNode *node) {
     if (!node) {
         return nullptr;
     }
 
-    // Dispatch to the correct visit method based on node type:
     switch (node->kind()) {
     case AstNodeKind::Identifier:
         visit(static_cast<AstIdentifier &>(*node));
@@ -398,7 +434,6 @@ llvm::Value *CodegenVisitor::generateExpr(AstNode *node) {
     case AstNodeKind::Binary:
         visit(static_cast<AstBinary &>(*node));
         break;
-    // Add other expression node kinds as needed.
     default:
         THROW_CODEGEN("Unsupported expression node", this->verbose);
     }
@@ -409,7 +444,7 @@ llvm::Value *CodegenVisitor::generateExpr(AstNode *node) {
 llvm::Type *CodegenVisitor::toLLVMType(const Type &type) {
     switch (type.kind) {
     case Type::Kind::Primary:
-        switch (type.data.primary) {
+        switch (std::get<PrimaryType>(type.data)) {
         case PrimaryType::I8:
             return llvm::Type::getInt8Ty(*this->context);
         case PrimaryType::I16:
@@ -447,7 +482,7 @@ llvm::Type *CodegenVisitor::toLLVMType(const Type &type) {
         }
 
     case Type::Kind::Array: {
-        const auto &array = type.data.array;
+        const auto &array = std::get<Type::ArrayData>(type.data);
 
         llvm::Type *elemTy = toLLVMType(*array.elementType);
 
@@ -482,7 +517,7 @@ void CodegenVisitor::optimize() {
     llvm::CGSCCAnalysisManager cgam;
     llvm::ModuleAnalysisManager mam;
 
-    // Register all the basic analyses with the managers.
+    // register all the basic analyses with the managers.
     passBuilder.registerModuleAnalyses(mam);
     passBuilder.registerCGSCCAnalyses(cgam);
     passBuilder.registerFunctionAnalyses(fam);
@@ -508,15 +543,21 @@ void CodegenVisitor::optimize() {
     case Optimization::Oz:
         optLevel = llvm::OptimizationLevel::Oz;
         break;
+    default:
+        THROW_CODEGEN("Unsupported optimization level", this->verbose);
     }
     llvm::FunctionPassManager fpm =
         passBuilder.buildFunctionSimplificationPipeline(
             optLevel, llvm::ThinOrFullLTOPhase::None);
 
-    // Run function-level optimizations
+    // run function-level optimizations
     for (llvm::Function &func : *this->module) {
         fpm.run(func, fam);
     }
+
+    llvm::ModulePassManager mpm =
+        passBuilder.buildPerModuleDefaultPipeline(optLevel);
+    mpm.run(*this->module, mam);
 }
 
 void CodegenVisitor::emitObjectFile(const std::string &filename) {

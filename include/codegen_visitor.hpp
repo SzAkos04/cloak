@@ -9,6 +9,7 @@
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Module.h>
+#include <llvm/IR/Type.h>
 #include <llvm/IR/Value.h>
 #include <llvm/Support/raw_ostream.h>
 
@@ -45,25 +46,36 @@ class CodegenVisitor : public AstVisitor {
     llvm::Module *getModule() const { return module.get(); }
     llvm::LLVMContext *getContext() const { return context.get(); }
 
-    void dumpIR() const { module->print(llvm::outs(), nullptr); }
+    void dumpIR() const { this->module->print(llvm::outs(), nullptr); }
 
   private:
     std::unique_ptr<llvm::LLVMContext> context;
     std::unique_ptr<llvm::Module> module;
     llvm::IRBuilder<> builder;
 
-    std::unordered_map<std::string, llvm::Value *> namedValues;
-    llvm::Value *lastValue = nullptr;
+    struct VariableInfo {
+        llvm::Value *value;
+        std::unique_ptr<Type> type;
+        bool mut;
 
-    std::unordered_map<std::string, std::unique_ptr<Type>> namedTypes;
+        VariableInfo(llvm::Value *value_, std::unique_ptr<Type> type_,
+                     bool mut_)
+            : value(std::move(value_)), type(std::move(type_)), mut(mut_) {}
+    };
+
+    std::unordered_map<std::string, VariableInfo> symbolTable;
+    llvm::Value *lastValue = nullptr;
 
     std::string filename;
     Optimization optimization;
     bool verbose;
 
     // Helper methods
-    void declareFnPrototypes(const AstProgram &program);
-    llvm::Function *generatePrototype(const AstFn &fn);
+    void declareSymbol(const std::string &name, const Type *type, bool mut,
+                       llvm::Value *value = nullptr);
+    void declareGlobals(const AstProgram &program);
+    llvm::Function *generateFnPrototype(const AstFn &fn);
+    void generateGlobalVariable(const AstLet &let);
     llvm::Value *generateExpr(AstNode *node);
     llvm::Type *toLLVMType(const Type &type);
 
