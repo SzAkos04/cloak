@@ -39,6 +39,7 @@ class CodegenVisitor : public AstVisitor {
     void visit(AstBlock &node) override;
     void visit(AstUnary &node) override;
     void visit(AstBinary &node) override;
+    void visit(AstAssign &node) override;
     void visit(AstFn &node) override;
     void visit(AstLet &node) override;
     void visit(AstReturn &node) override;

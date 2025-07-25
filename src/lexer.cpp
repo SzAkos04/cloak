@@ -101,9 +101,6 @@ std::vector<Token> Lexer::lex() {
                             this->verbose);
             }
             break;
-        case '"':
-            tokens.push_back(this->string());
-            break;
 
         default:
             if (std::isdigit(c)) {
@@ -175,24 +172,6 @@ void Lexer::skipWhitespace() {
 Token Lexer::makeToken(TokenType type) {
     std::string lexeme = this->src.substr(this->start, this->cur - this->start);
     return Token(type, lexeme, (int)lexeme.length(), this->line);
-}
-
-Token Lexer::string() {
-    while (!this->isAtEnd() && this->peek() != '"') {
-        if (this->peek() == '\n') {
-            this->line++;
-        }
-        this->advance();
-    }
-
-    if (this->isAtEnd()) {
-        THROW_LEXER(this->line, "Unterminated string.", this->verbose);
-    }
-
-    this->advance(); // consume `"`
-    std::string content =
-        this->src.substr(this->start + 1, this->cur - this->start - 2);
-    return Token(TokenType::String, content, (int)content.length(), this->line);
 }
 
 Token Lexer::number() {

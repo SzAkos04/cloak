@@ -46,7 +46,6 @@ enum class TokenType {
     Return, // `return`
 
     Number,
-    String,
     Bool,
 
     Eof,
@@ -156,8 +155,6 @@ class Token {
 
         case TokenType::Number:
             return "Number";
-        case TokenType::String:
-            return "String";
         case TokenType::Bool:
             return "Bool";
         case TokenType::Eof:

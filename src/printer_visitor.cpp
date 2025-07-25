@@ -27,9 +27,6 @@ void PrinterVisitor::visit(AstLiteral &node) {
     std::cout << "Literal: ";
     if (node.value.isNumber()) {
         std::cout << node.value.toString();
-    } else if (node.value.isString()) {
-        std::cout << "\"" << std::get<std::string>(node.value.value)
-                  << "\" (string)";
     } else if (node.value.isBool()) {
         std::cout << (std::get<bool>(node.value.value) ? "true" : "false")
                   << " (bool)";
@@ -111,6 +108,37 @@ void PrinterVisitor::visit(AstBinary &node) {
     this->indentLevel++;
     node.lhs->accept(*this);
     node.rhs->accept(*this);
+    this->indentLevel--;
+}
+
+void PrinterVisitor::visit(AstAssign &node) {
+    indent();
+    std::cout << "Assign: " << node.name << " ";
+
+    switch (node.op) {
+    case AssignmentOp::Assign:
+        std::cout << "=";
+        break;
+    case AssignmentOp::Add:
+        std::cout << "+=";
+        break;
+    case AssignmentOp::Sub:
+        std::cout << "-=";
+        break;
+    case AssignmentOp::Mul:
+        std::cout << "*=";
+        break;
+    case AssignmentOp::Div:
+        std::cout << "/=";
+        break;
+    case AssignmentOp::Mod:
+        std::cout << "%=";
+        break;
+    }
+
+    std::cout << "\n";
+    this->indentLevel++;
+    node.expr->accept(*this);
     this->indentLevel--;
 }
 

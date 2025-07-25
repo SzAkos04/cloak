@@ -66,7 +66,10 @@ Options:
   --no-silent                Enable warnings
   --verbose                  Show verbose debugging
   --help | -h                Show this help message
-  --version | -v             Show version info)"
+  --version | -v             Show version info
+  --dump-tokens              Print tokens vector to stdout
+  --dump-ast                 Print AST to stdout
+  --dump-ir                  Print LLVM IR to stdout)"
               << std::endl;
 }
 

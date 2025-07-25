@@ -21,6 +21,9 @@ cloak [options] <file.ck>
 | `--verbose`                  | Show verbose debugging                                |
 | `-h`, `--help`               | Show help message                                     |
 | `-v`, `--version`            | Show version info                                     |
+| `--dump-tokens`              | Print tokens vector to stdout                         |
+| `--dump-ast`                 | Print AST to stdout                                   |
+| `--dump-ir`                  | Print LLVM IR to stdout                               |
 
 ## Example Program
 
@@ -28,7 +31,7 @@ Here is a simple example of a Cloak Language program:
 
 ```cloak
 fn main(): i32 {
-    let x = 0;
+    let x: i32 = 0;
 
     return x;
 }

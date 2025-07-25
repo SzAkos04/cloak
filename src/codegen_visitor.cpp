@@ -124,18 +124,6 @@ void CodegenVisitor::visit(AstLiteral &node) {
         node.inferredType = &tempType;
         lastValue = llvm::ConstantInt::get(
             llvm::Type::getInt1Ty(*this->context), val.getBool() ? 1 : 0);
-    } else if (val.isString()) {
-        const std::string &str = val.getString();
-        llvm::Constant *strConstant =
-            llvm::ConstantDataArray::getString(*this->context, str);
-        llvm::GlobalVariable *strVar = new llvm::GlobalVariable(
-            *this->module, strConstant->getType(), true,
-            llvm::GlobalValue::PrivateLinkage, strConstant, ".str");
-
-        static Type tempType(PrimaryType::String);
-        node.inferredType = &tempType;
-        lastValue = this->builder.CreatePointerCast(
-            strVar, llvm::PointerType::getInt8Ty(*this->context));
     } else {
         THROW_CODEGEN("Unsupported literal type", this->verbose);
     }
@@ -266,6 +254,79 @@ void CodegenVisitor::visit(AstBinary &node) {
     }
 }
 
+void CodegenVisitor::visit(AstAssign &node) {
+    auto it = this->symbolTable.find(node.name);
+    if (it == this->symbolTable.end()) {
+        THROW_CODEGEN(
+            fmt::format("Assignment to undefined variable `{}`", node.name),
+            this->verbose);
+    }
+
+    VariableInfo &info = it->second;
+    if (!info.mut) {
+        THROW_CODEGEN(
+            fmt::format("Assignment of unmutable variable `{}`", node.name),
+            this->verbose);
+    }
+    llvm::Value *ptr = info.value;
+    llvm::Type *ptrTy = toLLVMType(*info.type);
+
+    llvm::Value *rhsVal = generateExpr(node.expr.get());
+
+    if (node.op == AssignmentOp::Assign) {
+        this->builder.CreateStore(rhsVal, ptr);
+        this->lastValue = rhsVal;
+        node.inferredType = info.type.get();
+        return;
+    }
+
+    llvm::Value *lhsVal = this->builder.CreateLoad(ptrTy, ptr, "loadtmp");
+
+    if (lhsVal->getType() != rhsVal->getType()) {
+        THROW_CODEGEN(
+            fmt::format("Type mismatch in assignment to `{}`", node.name),
+            this->verbose);
+    }
+
+    bool isFloat = lhsVal->getType()->isFloatingPointTy();
+    bool isSigned = info.type->isSigned();
+
+    llvm::Value *result = nullptr;
+
+    switch (node.op) {
+    case AssignmentOp::Add:
+        result = isFloat ? builder.CreateFAdd(lhsVal, rhsVal, "addtmp")
+                         : builder.CreateAdd(lhsVal, rhsVal, "addtmp");
+        break;
+    case AssignmentOp::Sub:
+        result = isFloat ? builder.CreateFSub(lhsVal, rhsVal, "subtmp")
+                         : builder.CreateSub(lhsVal, rhsVal, "subtmp");
+        break;
+    case AssignmentOp::Mul:
+        result = isFloat ? builder.CreateFMul(lhsVal, rhsVal, "multmp")
+                         : builder.CreateMul(lhsVal, rhsVal, "multmp");
+        break;
+    case AssignmentOp::Div:
+        result = isFloat    ? builder.CreateFDiv(lhsVal, rhsVal, "divtmp")
+                 : isSigned ? builder.CreateSDiv(lhsVal, rhsVal, "sdivtmp")
+                            : builder.CreateUDiv(lhsVal, rhsVal, "udivtmp");
+        break;
+    case AssignmentOp::Mod:
+        if (isFloat) {
+            THROW_CODEGEN("Modulo not supported for floats", this->verbose);
+        }
+        result = isSigned ? builder.CreateSRem(lhsVal, rhsVal, "modtmp")
+                          : builder.CreateURem(lhsVal, rhsVal, "modtmp");
+        break;
+    default:
+        THROW_CODEGEN("Unsupported assignment operator", this->verbose);
+    }
+
+    builder.CreateStore(result, ptr);
+    this->lastValue = result;
+    node.inferredType = info.type.get();
+}
+
 void CodegenVisitor::visit(AstFn &node) {
     // retrieve the function prototype from the module
     llvm::Function *func = this->module->getFunction(node.name);
@@ -390,22 +451,24 @@ llvm::Function *CodegenVisitor::generateFnPrototype(const AstFn &fn) {
 }
 
 void CodegenVisitor::generateGlobalVariable(const AstLet &let) {
-    llvm::Type *llvmTy = toLLVMType(let.type);
-
     llvm::Constant *initConstant = nullptr;
 
     if (let.expr) {
         llvm::Value *initVal = generateExpr(let.expr.get());
 
-        if (auto *constVal = llvm::dyn_cast<llvm::Constant>(initVal)) {
-            initConstant = constVal;
+        if (llvm::isa<llvm::ConstantExpr>(initVal) ||
+            llvm::isa<llvm::Constant>(initVal)) {
+            initConstant = llvm::cast<llvm::Constant>(initVal);
         } else {
             THROW_CODEGEN("Global variable initializer must be a constant",
                           this->verbose);
         }
     } else {
+        llvm::Type *llvmTy = toLLVMType(let.type);
         initConstant = llvm::Constant::getNullValue(llvmTy);
     }
+
+    llvm::Type *llvmTy = initConstant->getType();
 
     llvm::GlobalVariable *globalVar = new llvm::GlobalVariable(
         *this->module, llvmTy,
@@ -473,35 +536,9 @@ llvm::Type *CodegenVisitor::toLLVMType(const Type &type) {
         case PrimaryType::Void:
             return llvm::Type::getVoidTy(*this->context);
 
-        case PrimaryType::String:
-            return llvm::PointerType::getInt8Ty(*this->context);
-
         default:
             THROW_CODEGEN("Unknown primary type", this->verbose);
         }
-
-    case Type::Kind::Array: {
-        const auto &array = std::get<Type::ArrayData>(type.data);
-
-        llvm::Type *elemTy = toLLVMType(*array.elementType);
-
-        // attempt to extract constant integer from length expression
-        auto *literalNode = dynamic_cast<AstLiteral *>(array.length.get());
-        // TODO: identifier used as length
-        if (!literalNode || !literalNode->value.isNumber()) {
-            THROW_CODEGEN("Array length must be a numeric literal",
-                          this->verbose);
-        }
-
-        const auto number = literalNode->value.getNumber();
-        if (number.type != PrimaryType::I32 &&
-            number.type != PrimaryType::U32) {
-            THROW_CODEGEN("Array length must be i32 or u32", this->verbose);
-        }
-
-        uint64_t length = static_cast<uint64_t>(number.value);
-        return llvm::ArrayType::get(elemTy, length);
-    }
 
     default:
         THROW_CODEGEN("Unknown type kind", this->verbose);

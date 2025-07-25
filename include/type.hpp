@@ -18,7 +18,6 @@ enum class PrimaryType {
     U64,
     F32,
     F64,
-    String,
     Bool,
     Void,
 };
@@ -45,8 +44,6 @@ inline std::string primaryTypeToString(PrimaryType type) {
         return "f32";
     case PrimaryType::F64:
         return "f64";
-    case PrimaryType::String:
-        return "string";
     case PrimaryType::Bool:
         return "bool";
     case PrimaryType::Void:

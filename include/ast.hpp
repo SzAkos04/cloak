@@ -97,6 +97,40 @@ inline BinaryOp tokenTypeToBinaryOp(TokenType type) {
     }
 }
 
+enum class AssignmentOp {
+    Assign,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Mod,
+};
+
+inline bool isAssignmentOp(TokenType type) {
+    return type == TokenType::Equal || type == TokenType::PlusEqual ||
+           type == TokenType::MinusEqual || type == TokenType::StarEqual ||
+           type == TokenType::SlashEqual || type == TokenType::PercentEqual;
+}
+
+inline AssignmentOp tokenTypeToAssignmentOp(TokenType type) {
+    switch (type) {
+    case TokenType::Equal:
+        return AssignmentOp::Assign;
+    case TokenType::PlusEqual:
+        return AssignmentOp::Add;
+    case TokenType::MinusEqual:
+        return AssignmentOp::Sub;
+    case TokenType::StarEqual:
+        return AssignmentOp::Mul;
+    case TokenType::SlashEqual:
+        return AssignmentOp::Div;
+    case TokenType::PercentEqual:
+        return AssignmentOp::Mod;
+    default:
+        __builtin_unreachable();
+    }
+}
+
 struct AstNode;
 using AstNodePtr = std::unique_ptr<AstNode>;
 
@@ -107,6 +141,7 @@ enum class AstNodeKind {
     Block,
     Unary,
     Binary,
+    Assign,
     Fn,
     Let,
     Return,
@@ -187,6 +222,18 @@ struct AstBinary : AstNode {
     AstNodePtr clone() const override;
 };
 
+struct AstAssign : AstNode {
+    std::string name;
+    AssignmentOp op;
+    AstNodePtr expr;
+
+    AstAssign(std::string name_, AssignmentOp op_, AstNodePtr expr_)
+        : name(std::move(name_)), op(op_), expr(std::move(expr_)) {}
+    void accept(AstVisitor &visitor) override;
+    AstNodeKind kind() const override { return AstNodeKind::Assign; }
+    AstNodePtr clone() const override;
+};
+
 struct Param {
     std::string name;
     Type type;
@@ -247,6 +294,7 @@ struct AstVisitor {
     virtual void visit(AstBlock &) {}
     virtual void visit(AstUnary &) {}
     virtual void visit(AstBinary &) {}
+    virtual void visit(AstAssign &) {}
     virtual void visit(AstFn &) {}
     virtual void visit(AstLet &) {}
     virtual void visit(AstReturn &) {}
@@ -259,6 +307,7 @@ inline void AstLiteral::accept(AstVisitor &v) { v.visit(*this); }
 inline void AstBlock::accept(AstVisitor &v) { v.visit(*this); }
 inline void AstUnary::accept(AstVisitor &v) { v.visit(*this); }
 inline void AstBinary::accept(AstVisitor &v) { v.visit(*this); }
+inline void AstAssign::accept(AstVisitor &v) { v.visit(*this); }
 inline void AstFn::accept(AstVisitor &v) { v.visit(*this); }
 inline void AstLet::accept(AstVisitor &v) { v.visit(*this); }
 inline void AstReturn::accept(AstVisitor &v) { v.visit(*this); }
@@ -298,6 +347,11 @@ inline AstNodePtr AstUnary::clone() const {
 inline AstNodePtr AstBinary::clone() const {
     return std::make_unique<AstBinary>(lhs ? lhs->clone() : nullptr, op,
                                        rhs ? rhs->clone() : nullptr);
+}
+
+inline AstNodePtr AstAssign::clone() const {
+    return std::make_unique<AstAssign>(name, op,
+                                       expr ? expr->clone() : nullptr);
 }
 
 inline AstNodePtr AstFn::clone() const {

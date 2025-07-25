@@ -37,7 +37,6 @@ class Lexer {
     bool match(char exp);
     void skipWhitespace();
     Token makeToken(TokenType type);
-    Token string();
     Token number();
     Token identifier();
 };

@@ -48,12 +48,13 @@ AstNodePtr Parser::parseDecl() {
     }
 
     THROW_PARSER(this->peek().getLine(), "Expected declaration", this->verbose);
-    return nullptr;
 }
 
 AstNodePtr Parser::parseStmt() {
     Token tok = this->peek();
     switch (tok.getType()) {
+    case TokenType::Identifier:
+        return this->parseAssign();
     case TokenType::Let:
         return this->parseLet();
     case TokenType::Return:
@@ -105,9 +106,6 @@ Type Parser::parseType() {
         } else if (lexeme == "f64") {
             this->advance();
             return Type(PrimaryType::F64);
-        } else if (lexeme == "string") {
-            this->advance();
-            return Type(PrimaryType::String);
         } else if (lexeme == "void") {
             this->advance();
             return Type(PrimaryType::Void);
@@ -224,11 +222,6 @@ AstNodePtr Parser::parsePrimary() {
         }
     }
 
-    case TokenType::String: {
-        this->advance();
-        return std::make_unique<AstLiteral>(Literal(tok.getLexeme()));
-    }
-
     case TokenType::Bool: {
         this->advance();
         return std::make_unique<AstLiteral>(Literal(tok.getLexeme() == "true"));
@@ -249,7 +242,7 @@ AstNodePtr Parser::parseUnaryExpr() {
     if (tok.getType() == TokenType::Bang || tok.getType() == TokenType::Minus) {
         UnaryOp op = tokenTypeToUnaryOp(tok.getType());
         this->advance(); // consume operator
-        auto operand = this->parseUnaryExpr();
+        AstNodePtr operand = this->parseUnaryExpr();
         if (!operand) {
             return nullptr;
         }
@@ -329,11 +322,50 @@ AstNodePtr Parser::parseBlock() {
 
     std::vector<AstNodePtr> stmts;
 
-    while (!this->match(TokenType::RBrace) || !this->isAtEnd()) {
+    while (!this->check(TokenType::RBrace) && !this->isAtEnd()) {
         stmts.push_back(this->parseStmt());
+    }
+    if (!this->match(TokenType::RBrace)) {
+        THROW_PARSER(
+            this->peek().getLine(),
+            fmt::format("Expected `}`, found `{}`", this->peek().getLexeme()),
+            this->verbose);
     } // `}` consumed
 
     return std::make_unique<AstBlock>(std::move(stmts));
+}
+
+AstNodePtr Parser::parseAssign() {
+    Token nameTok = this->peek();
+
+    if (!this->match(TokenType::Identifier)) {
+        THROW_PARSER(
+            nameTok.getLine(),
+            fmt::format("Expected identifier, found `{}`", nameTok.getLexeme()),
+            this->verbose);
+    } // identifier consumed
+
+    Token opTok = this->peek();
+    if (!isAssignmentOp(opTok.getType())) {
+        THROW_PARSER(opTok.getLine(),
+                     fmt::format("Expected assignment operator, found `{}`",
+                                 opTok.getLexeme()),
+                     this->verbose);
+    }
+    this->advance(); // operator consumed
+
+    AstNodePtr expr = this->parseExpr(); // expr consumed
+
+    if (!this->match(TokenType::Semicolon)) {
+        THROW_PARSER(
+            this->peek().getLine(),
+            fmt::format("Expected `;`, found `{}`", this->peek().getLexeme()),
+            this->verbose);
+    } // `;` consumed
+
+    return std::make_unique<AstAssign>(nameTok.getLexeme(),
+                                       tokenTypeToAssignmentOp(opTok.getType()),
+                                       std::move(expr));
 }
 
 AstNodePtr Parser::parseFn() {
@@ -344,7 +376,7 @@ AstNodePtr Parser::parseFn() {
                      this->verbose);
     } // `fn` consumed
 
-    Token nameTok = peek();
+    Token nameTok = this->peek();
     if (!this->match(TokenType::Identifier)) {
         THROW_PARSER(this->peek().getLine(),
                      fmt::format("Expected identifier, found `{}`",
