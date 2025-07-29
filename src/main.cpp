@@ -7,7 +7,9 @@
 #include "printer_visitor.hpp"
 #include "token.hpp"
 
+#include <cstdlib>
 #include <fmt/core.h>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -52,7 +54,6 @@ int main(int argc, char **argv) {
         if (opts.dumpAst) {
             PrinterVisitor printer;
             ast->accept(printer);
-            std::cout << std::endl;
         }
 
         // generate intermediate representation
@@ -60,8 +61,9 @@ int main(int argc, char **argv) {
         ast->accept(codegen); // may throw CodegenError
         if (opts.dumpIR) {
             codegen.dumpIR();
-            std::cout << std::endl;
         }
+
+        /* TODO: Link object file */
     } catch (const CLIError &e) {
         LOG_FRIENDLY_ERROR(fmt::format("[CLI] {}", e.what()));
         return -1;
